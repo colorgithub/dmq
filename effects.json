@@ -5,9 +5,6 @@
     "audioText": "正在播放: 兵荒马乱",
     "audioLoop": true
   },
-  "color:？": {
-    "themeClass": "color-bg"
-  },
   "color:（": {
     "themeClass": "color-bg"
   },
