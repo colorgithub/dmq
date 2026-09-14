@@ -908,6 +908,10 @@ Promise.all([loadNames(), loadEffects()]).then(async () => {
     if (typeof saved.funNames === "string") settings.funNames = saved.funNames;
     if (typeof saved.studentNames === "string") settings.studentNames = saved.studentNames;
     if (typeof saved.namesText === "string") settings.funNames = saved.namesText; // 兼容旧数据
+    // 语音播报开关。这一行原来是漏掉的：用户在设置里关掉播报后确实写进了存储，
+    // 但刷新页面时没人把它读回来，于是又变回「开」—— 设置看着是保存了，其实每次
+    // 重新打开都失效。CS 页一直是有这一行的，主站没有。
+    if (typeof saved.announce === "boolean") settings.announce = saved.announce;
     if (saved.effects && typeof saved.effects === "object") settings.effects = saved.effects;
     if (saved.student && typeof saved.student === "object") {
       settings.student = Object.assign({}, settings.student, saved.student);

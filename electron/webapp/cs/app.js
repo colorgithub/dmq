@@ -93,6 +93,9 @@
     funNames: "",
     studentNames: "",
     announce: true,
+    // CS 页没有特效界面，这个字段只是为了和主站的设置形状保持一致。
+    // 它**不会被写回存储**（见 saveSettings：只合并 mode），所以别指望靠它
+    // 覆盖主站的特效配置 —— 那正是之前把用户特效清空的原因。
     effects: {},
     student: { start: 1, pad: "", prefix: "", suffix: "" }
   };
@@ -278,12 +281,35 @@
     return Promise.resolve(readLocalSettings());
   }
 
+  // CS 页只负责 mode 这一个键 —— 它没有名单 / 特效 / 学号的编辑界面，
+  // settings 里其余字段对它来说都是「别人的数据」。
+  //
+  // 两个页面共用同一份设置：网页版是 localStorage 的 lucky_settings_v1，
+  // 桌面版是 userData/settings.json，而且**两边的写入都是整体覆盖**。
+  // 所以这里必须「读出当前存储 → 只覆盖自己改过的键 → 写回」。
+  //
+  // 原来这里是直接把整个 settings 写回去，于是 CS 页里恒为 {} 的 settings.effects
+  // 会把用户在特效管理里配好的特效全部抹掉 —— 点一下顶部模式 chip 就会发生，
+  // 而且不报任何错（主站只会悄悄退回内置特效）。
+  function mergeModeInto(prev) {
+    var base = (prev && typeof prev === "object") ? prev : {};
+    return Object.assign({}, base, { mode: settings.mode });
+  }
+
   function saveSettings() {
-    var data = JSON.parse(JSON.stringify(settings));
     try {
       var bridge = window.desktopBall && window.desktopBall.settings;
-      if (bridge && bridge.save) { bridge.save(data); return; }
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(data));
+      if (bridge && bridge.save) {
+        // 桌面版：先读出磁盘上的完整设置，合并后再写回
+        var commit = function (prev) { bridge.save(mergeModeInto(prev)); };
+        if (bridge.load) {
+          Promise.resolve(bridge.load()).then(commit, function () { commit(null); });
+        } else {
+          commit(null);
+        }
+        return;
+      }
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(mergeModeInto(readLocalSettings())));
     } catch (e) { /* ignore */ }
   }
 
