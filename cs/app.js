@@ -562,14 +562,23 @@
 
   // ==================== 点名主流程 ====================
 
+  // ==================== 抽取 ====================
+
+  // 全应用唯一的抽取点，必须保持均匀：每人概率严格相等（1 / roster.length）。
+  //
+  // 这里是「不分等级」这个约定的唯一归属地 —— 稀有度（tier）只是抽完之后贴上去的
+  // 展示标签，只影响卡片配色、结果文案和揭晓音效，**绝不参与抽取，也不影响概率**。
+  // 想在抽取里引入任何权重（比如让稀有度高的人更少出现），都必须先改这里，
+  // 而改这里就等于明确地推翻上面的约定。
+  function pickWinner() {
+    return roster[Math.floor(Math.random() * roster.length)];
+  }
+
   function startSpin() {
     if (spinning || !roster.length) return;
     spinning = true;
 
-    // 均匀抽取：名单在 buildRoster 里已去重，这里是唯一的抽取点，
-    // 每人概率严格相等（1 / roster.length），没有任何权重。
-    // 下面的稀有度只是抽完之后贴上去的展示标签，不参与抽取，也不影响概率。
-    var winner = roster[Math.floor(Math.random() * roster.length)];
+    var winner = pickWinner();
 
     clearWinnerHighlight();
     fillReels(winner);

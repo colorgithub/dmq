@@ -638,11 +638,33 @@ function refreshAdminNameOptions() {
   }
 }
 
-function exitAdminMode() {
+// 管理员面板是**非模态**下拉面板（没有遮罩），所以不用 inert / 焦点陷阱，
+// 但四件事必须做齐，否则键盘用户基本用不了：
+//   1) 按钮上同步 aria-expanded（否则屏幕阅读器不知道面板开没开）
+//   2) 打开时把焦点移进面板 —— 面板在 DOM 里排在两个 toggle 之后，
+//      不移焦点的话键盘用户要 Tab 3 次才进得去
+//   3) Escape 能关
+//   4) 点面板外面能关（否则只能再点一次那个小按钮）
+function openAdminMode() {
+  isAdmin = true;
+  adminToggle.textContent = "退";
+  adminToggle.title = "退出管理员";
+  adminToggle.setAttribute("aria-expanded", "true");
+  adminPanel.classList.add("show");
+  refreshAdminNameOptions();
+  if (adminNameSelect) adminNameSelect.focus();
+}
+
+// restoreFocus：只有键盘触发的关闭才把焦点还给按钮。
+// 鼠标点到别处时抢焦点会让人莫名其妙（焦点突然跳到一个没碰过的按钮上）。
+function exitAdminMode(restoreFocus) {
+  if (!isAdmin) return;
   isAdmin = false;
   adminPanel.classList.remove("show");
   adminToggle.textContent = "管";
   adminToggle.title = "管理员模式";
+  adminToggle.setAttribute("aria-expanded", "false");
+  if (restoreFocus && adminToggle) adminToggle.focus();
 }
 
 function stopAllAudio() {
@@ -760,14 +782,11 @@ musicControl.addEventListener("click", () => {
 
 adminToggle.addEventListener("click", () => {
   if (isAdmin) {
-    exitAdminMode();
+    // 焦点本来就在这个按钮上（鼠标点击也会让 button 获得焦点），不用再还一次
+    exitAdminMode(false);
     return;
   }
-  isAdmin = true;
-  adminToggle.textContent = "退";
-  adminToggle.title = "退出管理员";
-  adminPanel.classList.add("show");
-  refreshAdminNameOptions();
+  openAdminMode();
 });
 
 adminApplyBtn.addEventListener("click", () => {
@@ -776,7 +795,15 @@ adminApplyBtn.addEventListener("click", () => {
 });
 
 adminExitBtn.addEventListener("click", () => {
-  exitAdminMode();
+  exitAdminMode(true);   // 键盘按到「退出」时焦点该回到「管」按钮上
+});
+
+// 点面板外面就关掉。注意 adminToggle 自己的 click 会先跑完（开/关面板），
+// 这里必须把按钮本身排除掉，否则刚打开就被这一下关回去。
+document.addEventListener("click", (e) => {
+  if (!isAdmin) return;
+  if (adminPanel.contains(e.target) || adminToggle.contains(e.target)) return;
+  exitAdminMode(false);
 });
 
 // ---------- 设置面板事件 ----------
@@ -858,8 +885,10 @@ document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
   // 只关真正打开的那个。原来两个 close 都是无条件调用，于是即使关的是设置面板，
   // 后执行的 closeEffects() 也会把焦点抢到「特效管理」按钮上 —— 焦点归位的对象错了。
-  if (settingsOverlay.classList.contains("show")) closeSettings();
-  if (effectsOverlay.classList.contains("show")) closeEffects();
+  // 弹层优先：弹层开着时它背后的东西都是 inert 的，不该被同一次 Escape 一起关掉。
+  if (settingsOverlay.classList.contains("show")) { closeSettings(); return; }
+  if (effectsOverlay.classList.contains("show")) { closeEffects(); return; }
+  if (isAdmin) exitAdminMode(true);
 });
 
 // ========== 初始化 ==========
