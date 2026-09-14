@@ -287,6 +287,26 @@ async function saveSettings() {
 
 // ========== 设置面板 ==========
 
+// aria-modal="true" 只是「声明」弹层之外不可交互 —— 浏览器不会替我们实现它。
+// 实测（弹层开着连按 25 次 Tab）有 8 次焦点跑到了弹层背后：modeBadge、speedControl、
+// startBtn、csToggle、musicControl、adminToggle、settingsToggle、effectsToggle。
+// 也就是说键盘用户能在设置面板开着的时候按回车把签抽了，甚至跳走到 CS 点名页。
+//
+// 所以打开弹层时把其它顶层节点设为 inert：Chromium 原生支持，一次同时挡掉
+// 焦点遍历、指针事件与无障碍树 —— 正好是 aria-modal="true" 承诺的那三件事。
+//
+// 用显式的 activeModal 记录当前弹层，而不是从 .show class 反推「最上面那个」：
+// 后者在两个弹层同时开着时会选错（按 DOM 顺序取最后一个），反而把真正在用的
+// 那个弹层变成 inert。UI 上虽然点不出「两个同时开」，但不值得留这个隐患。
+let activeModal = null;
+
+function syncModalInert() {
+  const children = document.body.children;
+  for (let i = 0; i < children.length; i++) {
+    children[i].inert = Boolean(activeModal) && children[i] !== activeModal;
+  }
+}
+
 function openSettings() {
   settingsFunNames.value = (settings.funNames || "").trim()
     ? settings.funNames
@@ -302,12 +322,16 @@ function openSettings() {
   announceToggle.checked = !!settings.announce;
   updateCounts();
   settingsOverlay.classList.add("show");
-  // 焦点移进弹层，键盘用户不会 Tab 到底下的内容去
+  // 顺序很重要：先把背景设为 inert（这会让当前焦点失效），再把焦点移进弹层
+  activeModal = settingsOverlay;
+  syncModalInert();
   if (settingsClose) settingsClose.focus();
 }
 
 function closeSettings() {
   settingsOverlay.classList.remove("show");
+  if (activeModal === settingsOverlay) activeModal = null;
+  syncModalInert();
   if (settingsToggle) settingsToggle.focus();
 }
 
@@ -523,11 +547,15 @@ function collectEffects() {
 function openEffects() {
   renderEffects();
   effectsOverlay.classList.add("show");
+  activeModal = effectsOverlay;
+  syncModalInert();
   if (effectsClose) effectsClose.focus();
 }
 
 function closeEffects() {
   effectsOverlay.classList.remove("show");
+  if (activeModal === effectsOverlay) activeModal = null;
+  syncModalInert();
   if (effectsToggle) effectsToggle.focus();
 }
 
@@ -827,10 +855,11 @@ announceToggle.addEventListener("change", async () => {
   await saveSettings();
 });
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") {
-    closeSettings();
-    closeEffects();
-  }
+  if (e.key !== "Escape") return;
+  // 只关真正打开的那个。原来两个 close 都是无条件调用，于是即使关的是设置面板，
+  // 后执行的 closeEffects() 也会把焦点抢到「特效管理」按钮上 —— 焦点归位的对象错了。
+  if (settingsOverlay.classList.contains("show")) closeSettings();
+  if (effectsOverlay.classList.contains("show")) closeEffects();
 });
 
 // ========== 初始化 ==========
