@@ -197,6 +197,21 @@ function itemEffectKey(text) {
   return parts.length >= 2 ? parts.slice(1).join(" ") : text;
 }
 
+// 主站的核心输出是 #nameDisplay，但滚动时它每秒要变上百次，直接给它加
+// aria-live 会把屏幕阅读器刷爆。所以只在出结果时往这个独立区域写一次。
+function announceResult(text) {
+  const el = document.getElementById("srAnnounce");
+  if (!el) return;
+  const msg = String(text || "");
+  if (el.textContent === msg) {
+    // 连着抽到同一个人时，文本没变化不会触发播报，先清空再写
+    el.textContent = "";
+    setTimeout(() => { el.textContent = msg; }, 30);
+  } else {
+    el.textContent = msg;
+  }
+}
+
 let speechVoices = [];
 let activeUtterance = null;
 let speechQueueTimer = null;
@@ -287,10 +302,13 @@ function openSettings() {
   announceToggle.checked = !!settings.announce;
   updateCounts();
   settingsOverlay.classList.add("show");
+  // 焦点移进弹层，键盘用户不会 Tab 到底下的内容去
+  if (settingsClose) settingsClose.focus();
 }
 
 function closeSettings() {
   settingsOverlay.classList.remove("show");
+  if (settingsToggle) settingsToggle.focus();
 }
 
 function updateCounts() {
@@ -348,13 +366,17 @@ function makeEffectRow(name, eff) {
   const head = document.createElement("div");
   head.className = "effect-row-head";
 
+  // 这些控件是动态生成的，没有 <label> 可关联，placeholder 也不能当无障碍名字用，
+  // 所以每个都显式给 aria-label
   const nameInput = document.createElement("input");
   nameInput.className = "eff-name";
   nameInput.placeholder = "特效名（对应抽中的名字）";
   nameInput.value = name;
+  nameInput.setAttribute("aria-label", "特效名（对应抽中的名字）");
 
   const themeSel = document.createElement("select");
   themeSel.className = "eff-theme";
+  themeSel.setAttribute("aria-label", "主题");
   THEME_OPTIONS.forEach((o) => {
     const opt = document.createElement("option");
     opt.value = o.value;
@@ -368,24 +390,26 @@ function makeEffectRow(name, eff) {
   delBtn.className = "eff-del";
   delBtn.textContent = "✕";
   delBtn.title = "删除";
+  delBtn.setAttribute("aria-label", "删除这个特效");
   delBtn.addEventListener("click", () => row.remove());
 
   head.appendChild(nameInput);
   head.appendChild(themeSel);
   head.appendChild(delBtn);
 
-  const mk = (cls, ph, val) => {
+  const mk = (cls, ph, val, label) => {
     const i = document.createElement("input");
     i.className = cls;
     i.placeholder = ph;
     i.value = val || "";
+    i.setAttribute("aria-label", label);
     return i;
   };
   const fields = document.createElement("div");
   fields.className = "effect-fields";
-  const bgInput = mk("eff-bg", "背景图路径，如 assets/img/01.png", data.backgroundImage);
-  const audioInput = mk("eff-audio", "音频路径，如 assets/audio/xn.mp3", data.audioSrc);
-  const atextInput = mk("eff-atext", "提示文字，如 正在播放:", data.audioText);
+  const bgInput = mk("eff-bg", "背景图路径，如 assets/img/01.png", data.backgroundImage, "背景图路径");
+  const audioInput = mk("eff-audio", "音频路径，如 assets/audio/xn.mp3", data.audioSrc, "音频路径");
+  const atextInput = mk("eff-atext", "提示文字，如 正在播放:", data.audioText, "播放时的提示文字");
   const loopLabel = document.createElement("label");
   const loopInput = document.createElement("input");
   loopInput.type = "checkbox";
@@ -417,10 +441,12 @@ function makeEffectRow(name, eff) {
   c1.type = "color";
   c1.className = "eff-bgcolor";
   c1.value = data.bgColor || "#ef476f";
+  c1.setAttribute("aria-label", "背景色");
   const c2 = document.createElement("input");
   c2.type = "color";
   c2.className = "eff-bgcolor2";
   c2.value = data.bgColor2 || "#ffd166";
+  c2.setAttribute("aria-label", "渐变第二色");
   const gradToggle = document.createElement("label");
   gradToggle.className = "effect-grad-toggle";
   const gradInput = document.createElement("input");
@@ -497,10 +523,12 @@ function collectEffects() {
 function openEffects() {
   renderEffects();
   effectsOverlay.classList.add("show");
+  if (effectsClose) effectsClose.focus();
 }
 
 function closeEffects() {
   effectsOverlay.classList.remove("show");
+  if (effectsToggle) effectsToggle.focus();
 }
 
 effectsToggle.addEventListener("click", openEffects);
@@ -644,6 +672,7 @@ function stopRolling() {
   nameDisplay.classList.add("selected");
   applyEffect(itemEffectKey(nameDisplay.textContent));
   speakName(nameDisplay.textContent);
+  announceResult(nameDisplay.textContent);
 }
 
 function showSpecificName(name) {
@@ -659,6 +688,7 @@ function showSpecificName(name) {
   nameDisplay.textContent = name;
   applyEffect(itemEffectKey(name));
   speakName(name);
+  announceResult(name);
 }
 
 function syncMusicButton() {

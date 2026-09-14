@@ -8,9 +8,9 @@
 </head>
 <body>
   <div class="container">
-    <div class="decoration star1">★</div>
-    <div class="decoration star2">✦</div>
-    <div class="decoration heart">❤</div>
+    <div class="decoration star1" aria-hidden="true">★</div>
+    <div class="decoration star2" aria-hidden="true">✦</div>
+    <div class="decoration heart" aria-hidden="true">❤</div>
 
     <div class="box">
       <h1>谁是幸运儿</h1>
@@ -23,14 +23,17 @@
       <div class="name-display">
         <div class="name" id="nameDisplay">点击开始</div>
       </div>
+      <!-- 屏幕阅读器专用：上面那个名字滚动时每秒要变上百次，不能直接当播报区，
+           这里只在出结果时更新一次 -->
+      <p class="sr-only" id="srAnnounce" role="status" aria-live="polite"></p>
 
       <div class="speed-wrap">
-        <div class="speed-label">
+        <div class="speed-label" aria-hidden="true">
           <span>慢</span>
           <span>滚动速度</span>
           <span>快</span>
         </div>
-        <input id="speedControl" type="range" min="5" max="600" step="5" value="525" />
+        <input id="speedControl" type="range" min="5" max="600" step="5" value="525" aria-label="滚动速度（左慢右快）" />
       </div>
 
       <button class="btn" id="startBtn" type="button">开始抽签</button>
@@ -47,7 +50,7 @@
   <div class="admin-panel" id="adminPanel">
     <div class="admin-row admin-title">管理员模式</div>
     <div class="admin-row">
-      <select id="adminNameSelect" class="admin-select"></select>
+      <select id="adminNameSelect" class="admin-select" aria-label="选择要直接显示的名字"></select>
     </div>
     <div class="admin-actions">
       <button class="admin-btn primary" id="adminApplyBtn" type="button">直接显示</button>
@@ -55,17 +58,17 @@
     </div>
   </div>
 
-  <div class="settings-overlay" id="settingsOverlay">
+  <div class="settings-overlay" id="settingsOverlay" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
     <div class="settings-panel">
       <div class="settings-head">
-        <h2>设置</h2>
+        <h2 id="settingsTitle">设置</h2>
         <button class="settings-close" id="settingsClose" type="button" aria-label="关闭">✕</button>
       </div>
 
       <div class="settings-section">
         <div class="settings-section-title">趣味模式 · 名单</div>
         <p class="settings-hint">每行一个名字。</p>
-        <textarea id="settingsFunNames" class="settings-textarea" rows="5" placeholder="每行一个名字"></textarea>
+        <textarea id="settingsFunNames" class="settings-textarea" rows="5" placeholder="每行一个名字" aria-label="趣味模式名单，每行一个名字"></textarea>
         <div class="settings-actions">
           <span class="settings-count" id="funCount">0 项</span>
           <button class="settings-btn" id="funSave" type="button">保存名单</button>
@@ -76,7 +79,7 @@
       <div class="settings-section">
         <div class="settings-section-title">学号+名字模式 · 名单</div>
         <p class="settings-hint">每行一个；写成「12&nbsp;张三」可指定学号，否则自动编号。</p>
-        <textarea id="settingsStudentNames" class="settings-textarea" rows="5" placeholder="每行一个，如 12 张三"></textarea>
+        <textarea id="settingsStudentNames" class="settings-textarea" rows="5" placeholder="每行一个，如 12 张三" aria-label="学号+名字模式名单，每行一个，写成「12 张三」可指定学号"></textarea>
         <div class="settings-actions">
           <span class="settings-count" id="studentListCount">0 项</span>
           <button class="settings-btn" id="studentNamesSave" type="button">保存名单</button>
@@ -111,10 +114,10 @@
     </div>
   </div>
 
-  <div class="settings-overlay" id="effectsOverlay">
+  <div class="settings-overlay" id="effectsOverlay" role="dialog" aria-modal="true" aria-labelledby="effectsTitle">
     <div class="settings-panel effects-panel">
       <div class="settings-head">
-        <h2>特效管理</h2>
+        <h2 id="effectsTitle">特效管理</h2>
         <button class="settings-close" id="effectsClose" type="button" aria-label="关闭">✕</button>
       </div>
       <p class="settings-hint">特效绑定到名字：抽中某名字时应用对应特效。主题可选“黑底/彩底/葡萄/白底”，背景和音频填资源路径（如 assets/img/01.png、assets/audio/xn.mp3）。</p>

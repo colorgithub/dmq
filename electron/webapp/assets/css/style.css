@@ -914,3 +914,21 @@ input[type="range"]::-moz-range-thumb {
   transform: translateY(-2px);
   box-shadow: 0 14px 26px rgba(94, 47, 44, 0.26);
 }
+
+/* ---------- 无障碍 ---------- */
+
+/* 屏幕阅读器专用文本：视觉上不可见，但不从无障碍树里移除。
+   主站的 #nameDisplay 滚动时每秒要变上百次，不能直接当播报区，
+   抽完之后把结果写进这个元素，屏幕阅读器才会念出来。 */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

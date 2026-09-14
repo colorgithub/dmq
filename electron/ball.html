@@ -48,6 +48,12 @@
       -webkit-tap-highlight-color: transparent;
     }
 
+    /* 键盘聚焦时给个可见的焦点环 */
+    #ball:focus-visible {
+      outline: 2px solid #bf2f4d;
+      outline-offset: 2px;
+    }
+
     #ball:hover {
       box-shadow:
         0 7px 18px rgba(0, 0, 0, 0.22),
@@ -69,8 +75,14 @@
   </style>
 </head>
 <body>
-  <div id="ball" title="点击打开「谁是幸运儿」，按住可移动">
-    <span>幸运儿</span>
+  <div
+    id="ball"
+    role="button"
+    tabindex="0"
+    aria-label="谁是幸运儿：按回车打开主界面，按住可拖动"
+    title="点击打开「谁是幸运儿」，按住可移动"
+  >
+    <span aria-hidden="true">幸运儿</span>
   </div>
 
   <script>
@@ -85,12 +97,33 @@
       var startX = 0;
       var startY = 0;
 
+      // ---- 拖动位置合并 ----
+      // pointermove 在高回报率鼠标上会打到 125~1000Hz，而主进程每移动一次窗口
+      // 要花 0.3ms 以上（setBounds 实测 324µs）。原来每个事件都发一次 IPC，
+      // 一秒就是几十到上百毫秒的主进程开销。这里合并到一帧只发最后一次，
+      // 位置不丢、手感不变（实测 showInactive 的未聚焦窗口 rAF 稳定 60fps）。
+      var pendingMove = null;
+      var moveRaf = 0;
+      var moveTimer = 0;
+
+      function flushMove() {
+        if (moveRaf) { cancelAnimationFrame(moveRaf); moveRaf = 0; }
+        if (moveTimer) { clearTimeout(moveTimer); moveTimer = 0; }
+        var p = pendingMove;
+        pendingMove = null;
+        if (p && api && api.dragMove) api.dragMove(p.x, p.y, p.type);
+      }
+
       function sendDragStart(x, y, pointerType) {
         if (api && api.dragStart) api.dragStart(x, y, pointerType);
       }
 
       function sendDragMove(x, y, pointerType) {
-        if (api && api.dragMove) api.dragMove(x, y, pointerType);
+        pendingMove = { x: x, y: y, type: pointerType };
+        if (moveRaf) return;
+        moveRaf = requestAnimationFrame(flushMove);
+        // 兜底：万一 rAF 被节流（窗口被完全遮挡等情况），保证拖动不会卡住
+        moveTimer = setTimeout(flushMove, 32);
       }
 
       ball.addEventListener('pointerdown', function (e) {
@@ -130,6 +163,8 @@
         if (!pressed) return;
         pressed = false;
 
+        // 先补发最后一次位置，再结束拖动，否则松手瞬间会丢掉一小段位移
+        if (pendingMove) flushMove();
         if (api && api.dragEnd) api.dragEnd();
 
         if (openWhenTap && !moved && api && api.open) {
@@ -151,6 +186,13 @@
       // 触摸长按不弹右键菜单
       ball.addEventListener('contextmenu', function (e) {
         e.preventDefault();
+      });
+
+      // 键盘可达：悬浮球原本只有指针事件，键盘用户完全打不开主界面
+      ball.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+        e.preventDefault();
+        if (api && api.open) api.open();
       });
     })();
   </script>
