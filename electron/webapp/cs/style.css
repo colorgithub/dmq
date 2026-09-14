@@ -149,6 +149,29 @@ body {
   color: rgba(255, 255, 255, 0.3);
 }
 
+/* 模式 chip 是真按钮（键盘可切），但保留金色，和旁边的只读 chip 区分开 */
+.chip-mode {
+  color: var(--gold-2);
+}
+
+.chip-mode:hover {
+  color: var(--gold-3);
+}
+
+/* 屏幕阅读器专用文本：视觉上不可见，但不从无障碍树里移除 */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* ---------- 舞台 ---------- */
 
 .stage {
@@ -233,11 +256,11 @@ body {
   height: 100%;
   display: flex;
   align-items: center;
+  /* 位置由 JS 逐帧 requestAnimationFrame 写入，不走 CSS 过渡。
+     这里曾写着 transition-property/timing-function/duration: 0ms，
+     是永远不会生效的死配置，已删。 */
   transform: translate3d(0, -50%, 0);
   will-change: transform;
-  transition-property: transform;
-  transition-timing-function: var(--ease);
-  transition-duration: 0ms;
   backface-visibility: hidden;
 }
 
@@ -303,7 +326,8 @@ body {
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75);
 }
 
-/* 学号模式：卡片上方的小号学号 */
+/* 学号模式：卡片上方的小号学号。卡片是复用的，趣味模式下这个元素仍然存在，
+   靠 hidden 隐藏——必须显式写 [hidden] 规则，否则上面的 display:block 会盖掉它。 */
 .card-id {
   display: block;
   margin-bottom: 5px;
@@ -311,6 +335,10 @@ body {
   font-weight: 700;
   letter-spacing: 0.1em;
   color: rgba(255, 255, 255, 0.5);
+}
+
+.card-id[hidden] {
+  display: none;
 }
 
 /* 中奖卡高亮 */

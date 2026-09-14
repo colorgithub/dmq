@@ -15,7 +15,7 @@
       </div>
 
       <div class="topbar-right">
-        <span class="chip" id="modeChip">趣味模式</span>
+        <button class="chip chip-btn chip-mode" id="modeChip" type="button">趣味模式</button>
         <span class="chip chip-dim" id="rosterCount">— 人</span>
         <button class="chip chip-btn" id="soundBtn" type="button">音效 开</button>
         <a class="switch-btn" href="../index.html" title="切换回抽签">⇄ 抽签</a>
@@ -38,6 +38,8 @@
       </div>
 
       <p class="status" id="status" role="status" aria-live="polite">准备就绪</p>
+      <!-- 屏幕阅读器专用：状态条只播稀有度，这里补上人名 -->
+      <p class="sr-only" id="srAnnounce" role="status" aria-live="polite"></p>
 
       <button class="open-btn" id="openBtn" type="button">
         <span id="openBtnLabel">开始点名</span>

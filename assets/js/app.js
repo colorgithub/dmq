@@ -119,8 +119,21 @@ function parseRosterLine(line) {
   return { id: null, name: t };
 }
 
+// 名单解析并不便宜（split + 逐行正则 + 补零 + 去重），而滚动最快每 5ms 就要取一次
+// 随机项 —— 按 5ms 算就是每秒 200 次解析、学号模式下每秒上万次正则匹配和对象分配。
+// 这里把解析结果缓存住，只有设置真的变了（见 refreshRoster / switchMode）才重算。
+// 缓存的数组是共享的，调用方只读不改（getRandomItem 取下标、currentAdminItems 遍历）。
+let funListCache = null;
+let studentRosterCache = null;
+
+function invalidateRosterCache() {
+  funListCache = null;
+  studentRosterCache = null;
+}
+
 // 趣味模式：纯名字列表
 function getFunList() {
+  if (funListCache) return funListCache;
   const src = (settings.funNames || "").trim()
     ? settings.funNames.split(/\r?\n/)
     : (defaultNames.length ? defaultNames : names);
@@ -129,11 +142,13 @@ function getFunList() {
     const t = String(line || "").trim();
     if (t) out.push(t);
   });
-  return [...new Set(out)];
+  funListCache = [...new Set(out)];
+  return funListCache;
 }
 
 // 学号+名字模式：id + name
 function getStudentRoster() {
+  if (studentRosterCache) return studentRosterCache;
   const st = settings.student || {};
   let counter = (typeof st.start === "number" && Number.isFinite(st.start)) ? st.start : 1;
   const pad = parseInt(st.pad, 10);
@@ -153,7 +168,8 @@ function getStudentRoster() {
     list.push({ id: String(id), name: p.name });
     counter += 1;
   });
-  return list;
+  studentRosterCache = list;
+  return studentRosterCache;
 }
 
 function currentAdminItems() {
@@ -301,6 +317,8 @@ function updateModeUI() {
 }
 
 function refreshRoster() {
+  // 设置/名单变了，缓存的解析结果作废
+  invalidateRosterCache();
   refreshAdminNameOptions();
   updateModeUI();
   updateCounts();
@@ -765,6 +783,7 @@ async function switchMode() {
   nameDisplay.textContent = "点击开始";
   updateModeUI();
   updateCounts();
+  invalidateRosterCache();
   refreshAdminNameOptions();
   await saveSettings();
 }

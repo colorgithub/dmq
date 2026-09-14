@@ -68,6 +68,7 @@
   var soundBtn = document.getElementById("soundBtn");
   var modeChip = document.getElementById("modeChip");
   var rosterCountEl = document.getElementById("rosterCount");
+  var srAnnounce = document.getElementById("srAnnounce");
 
   // ==================== 状态 ====================
 
@@ -78,11 +79,14 @@
   var spinning = false;
   var soundOn = true;
   var rafId = 0;
+  var resizeRaf = 0;
   // 滚轮逻辑位置，单位＝卡宽。用「卡坐标」而不是像素，
   // 这样窗口尺寸变化（--card-w 从 256 变 160）时滚轮不会跑出可视区。
   var currentCards = 0;
 
-  var metrics = { strip: 0, lens: 0, card: 256 };
+  // 尺寸只在启动与窗口变化时量一次。卡宽由 CSS 变量 --card-w 决定，
+  // 抽签过程中不会变，所以没必要每次抽签都强制一次布局。
+  var metrics = { strip: 0, lens: 0, card: 256, valid: false };
 
   var settings = {
     mode: "fun",
@@ -346,16 +350,20 @@
   // ==================== 语音播报 ====================
 
   var voices = [];
+  var zhVoice;            // undefined = 还没挑过；null = 挑过了但没有中文语音
   var speechTimer = null;
 
   function refreshVoices() {
     if (!("speechSynthesis" in window)) return;
     voices = window.speechSynthesis.getVoices().filter(Boolean);
+    zhVoice = undefined;  // 语音列表变了，重新挑
   }
 
   function pickChineseVoice() {
+    if (zhVoice !== undefined) return zhVoice;
     var zh = voices.filter(function (v) { return v.lang && v.lang.toLowerCase().indexOf("zh") === 0; });
-    return zh.find(function (v) { return v.localService !== false; }) || zh[0] || null;
+    zhVoice = zh.find(function (v) { return v.localService !== false; }) || zh[0] || null;
+    return zhVoice;
   }
 
   function speak(name, delay) {
@@ -365,7 +373,9 @@
     speechTimer = setTimeout(function () {
       try {
         var synth = window.speechSynthesis;
-        refreshVoices();
+        // getVoices() 在 Windows 上要枚举一遍系统语音，没必要每次播报都问一次；
+        // 首次为空时再取，之后靠 onvoiceschanged 刷新。
+        if (!voices.length) refreshVoices();
         var u = new SpeechSynthesisUtterance(name);
         u.lang = "zh-CN";
         var zh = pickChineseVoice();
@@ -379,49 +389,76 @@
 
   // ==================== 滚轮渲染 ====================
 
-  function makeCard(item) {
+  // 卡片池：两条滚轮各 62 张，抽签时只改文字与稀有度色，不重建 DOM。
+  // 早先每次抽签要新建约 370 个节点再全部销毁，现在新建数为 0。
+  var pool = { strip: [], lens: [] };
+
+  function makeCard() {
     var card = document.createElement("div");
     card.className = "card";
-    card.style.setProperty("--rarity", item.tier.color);
 
     var inner = document.createElement("div");
     inner.className = "card-inner";
 
     var name = document.createElement("span");
     name.className = "card-name";
-    if (item.id) {
-      var idEl = document.createElement("span");
-      idEl.className = "card-id";
-      idEl.textContent = item.id;
-      name.appendChild(idEl);
-    }
-    name.appendChild(document.createTextNode(item.name));
 
+    var idEl = document.createElement("span");
+    idEl.className = "card-id";
+    idEl.hidden = true;
+
+    var textNode = document.createTextNode("");
+    name.appendChild(idEl);
+    name.appendChild(textNode);
     inner.appendChild(name);
     card.appendChild(inner);
+
+    // 缓存子节点引用，刷新时直接改 nodeValue，避免 textContent 重建文本节点
+    card._id = idEl;
+    card._text = textNode;
     return card;
+  }
+
+  function updateCard(card, item) {
+    card.style.setProperty("--rarity", item.tier.color);
+    if (item.id) {
+      card._id.textContent = item.id;
+      card._id.hidden = false;
+    } else {
+      card._id.hidden = true;
+    }
+    card._text.nodeValue = item.name;
+  }
+
+  // 池子按需扩容；节点被摘下来过（例如名单清空时清空了 reel）就重新挂回去
+  function attachPool(reel, list) {
+    if (reel.childElementCount) return;
+    var frag = document.createDocumentFragment();
+    for (var i = 0; i < list.length; i++) frag.appendChild(list[i]);
+    reel.appendChild(frag);
+  }
+
+  function ensurePool() {
+    for (var i = pool.strip.length; i < REEL_COUNT; i++) {
+      pool.strip.push(makeCard());
+      pool.lens.push(makeCard());
+    }
+    attachPool(stripReel, pool.strip);
+    attachPool(lensReel, pool.lens);
   }
 
   // 两条滚轮内容必须完全一致，放大镜才像同一个滚轮
   function fillReels(winner) {
-    var a = document.createDocumentFragment();
-    var b = document.createDocumentFragment();
+    ensurePool();
     winnerCards = [];
 
     for (var i = 0; i < REEL_COUNT; i++) {
       var isWinner = !!winner && i === WINNER_INDEX;
       var item = isWinner ? winner : roster[Math.floor(Math.random() * roster.length)];
-      var c1 = makeCard(item);
-      var c2 = makeCard(item);
-      if (isWinner) winnerCards.push(c1, c2);
-      a.appendChild(c1);
-      b.appendChild(c2);
+      updateCard(pool.strip[i], item);
+      updateCard(pool.lens[i], item);
+      if (isWinner) winnerCards.push(pool.strip[i], pool.lens[i]);
     }
-
-    stripReel.textContent = "";
-    lensReel.textContent = "";
-    stripReel.appendChild(a);
-    lensReel.appendChild(b);
   }
 
   function measure() {
@@ -430,6 +467,7 @@
     var first = stripReel.firstElementChild;
     metrics.card = first ? first.getBoundingClientRect().width : 256;
     if (!metrics.card) metrics.card = 256;
+    metrics.valid = true;
   }
 
   // cards = 滚轮停留的卡坐标：整数部分是卡片序号，小数部分是卡内落点比例。
@@ -516,13 +554,13 @@
 
     clearWinnerHighlight();
     fillReels(winner);
-    measure();
+    // 卡宽只在断点变化时才变，已经量过就不必再量（避免每次抽签强制一次布局）
+    if (!metrics.valid) measure();
 
     var startCards = 0.5;
     var endCards = WINNER_INDEX + LAND_MIN + LAND_SPAN * Math.random();
 
     applyCards(startCards);
-    void stripReel.offsetWidth; // 强制回流，保证从起点开始动
 
     var reduce = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
     var spinMs = reduce ? REDUCED_MS : SPIN_MS;
@@ -580,6 +618,10 @@
 
     showResult(winner);
     setStatus("★ " + winner.tier.cn + " ★", "is-win");
+    // 状态条只报稀有度，人名单独播给屏幕阅读器
+    if (srAnnounce) {
+      srAnnounce.textContent = "抽中 " + (winner.id ? winner.id + " " : "") + winner.name + "，" + winner.tier.cn;
+    }
 
     openBtn.disabled = false;
     openBtnLabel.textContent = "再来一次";
@@ -661,10 +703,15 @@
   document.addEventListener("pointerdown", unlockAudio, { once: true });
   document.addEventListener("keydown", unlockAudio, { once: true });
 
+  // resize 会连发几十次，每次都 measure() 就是几十次强制布局。合并到一帧里做一次。
   window.addEventListener("resize", function () {
-    if (spinning) return;
-    measure();
-    applyCards(currentCards);
+    if (spinning || resizeRaf) return;
+    resizeRaf = requestAnimationFrame(function () {
+      resizeRaf = 0;
+      if (spinning) return;
+      measure();
+      applyCards(currentCards);
+    });
   });
 
   // ==================== 启动 ====================
@@ -702,6 +749,8 @@
   // 防止关闭页面时还在跑的动画留个悬空定时器
   window.addEventListener("pagehide", function () {
     if (rafId) cancelAnimationFrame(rafId);
+    if (resizeRaf) cancelAnimationFrame(resizeRaf);
     if (speechTimer) clearTimeout(speechTimer);
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
   });
 })();
