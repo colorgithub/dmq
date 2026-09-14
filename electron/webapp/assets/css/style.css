@@ -851,6 +851,43 @@ input[type="range"]::-moz-range-thumb {
   }
 }
 
+/* CS 点名器入口（右上角） */
+.cs-toggle {
+  position: fixed;
+  right: 16px;
+  top: 16px;
+  z-index: 12;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 15px;
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 10px 20px rgba(94, 47, 44, 0.2);
+  color: #bf2f4d;
+  font-size: 0.86rem;
+  font-weight: 700;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.cs-toggle:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 24px rgba(94, 47, 44, 0.28);
+}
+
+@media (max-width: 640px) {
+  .cs-toggle {
+    right: 12px;
+    top: 12px;
+    font-size: 0.8rem;
+    padding: 9px 13px;
+  }
+}
+
 /* 悬浮球桌面版：回到悬浮球按钮 */
 .ball-return {
   position: fixed;
