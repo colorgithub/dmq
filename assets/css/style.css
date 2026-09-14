@@ -905,3 +905,20 @@ input[type="range"]::-moz-range-thumb {
   white-space: nowrap;
   border: 0;
 }
+
+/* 用户明确要求减少动效时，停掉所有无限循环的装饰动画。
+   上面这类动画有 6 处：body::before / body::after 的背景漂移、
+   color-bg 主题的彩虹渐变、★✦❤ 三个装饰、以及 .name.selected
+   那个 0.48s（约 2Hz）的缩放脉冲 —— 最后一个正好作用在读完名字的
+   那一刻，对动效敏感的人最难受。
+   注意只停动画，静态样式（颜色、渐变、位置）都要保留。 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -97,6 +97,18 @@
     student: { start: 1, pad: "", prefix: "", suffix: "" }
   };
 
+  // ==================== 无障碍偏好 ====================
+
+  // 用户是否要求减少动效。CSS 侧的 @media 只能管到样式，
+  // 有两处是 JS 主动发起的动效，必须在这里单独判断：
+  //   1) startSpin 里的滚动时长（5200ms -> 900ms）
+  //   2) showResult 里 scrollIntoView 的 behavior（smooth -> auto）——
+  //      CSS 的 scroll-behavior 覆盖不了显式传入的 behavior 选项
+  function prefersReducedMotion() {
+    return !!(window.matchMedia &&
+              window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  }
+
   // ==================== 缓动 ====================
 
   // cubic-bezier 求值（牛顿迭代 + 二分兜底），返回 x -> y 的函数
@@ -527,14 +539,21 @@
     resultTag.textContent = (winner.id ? winner.id + " · " : "") + winner.tier.cn;
     resultName.textContent = winner.name;
     resultEl.hidden = false;
-    // 重放弹出动画
-    resultCard.style.animation = "none";
-    void resultCard.offsetWidth;
-    resultCard.style.animation = "";
+    // 重放弹出动画。pop 的终态就是基础样式（opacity:1 / transform:none），
+    // 所以减少动效时直接跳过：既不用为了一次强制回流白跑一遍布局，
+    // 视觉上也完全一致（CSS 那边已经把 .result-card 的 animation 关掉了）。
+    if (!prefersReducedMotion()) {
+      resultCard.style.animation = "none";
+      void resultCard.offsetWidth;
+      resultCard.style.animation = "";
+    }
     // 窗口矮的时候结果卡可能落在折叠线以下，轻轻滚一点让它露出来
     if (typeof resultEl.scrollIntoView === "function") {
       try {
-        resultEl.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        resultEl.scrollIntoView({
+          block: "nearest",
+          behavior: prefersReducedMotion() ? "auto" : "smooth"
+        });
       } catch (e) {
         resultEl.scrollIntoView(false);
       }
@@ -562,7 +581,7 @@
 
     applyCards(startCards);
 
-    var reduce = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+    var reduce = prefersReducedMotion();
     var spinMs = reduce ? REDUCED_MS : SPIN_MS;
     var kickMs = reduce ? 0 : KICK_MS;
     var kickCards = reduce ? startCards : startCards + KICK_CARDS;
