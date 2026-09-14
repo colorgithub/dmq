@@ -189,12 +189,36 @@ function resolvePointer(x, y, pointerType) {
   return screen.getCursorScreenPoint();
 }
 
+// 把悬浮球限制在「球中心所在的那块屏幕」的工作区里。
+//
+// 原来拖动完全没有边界：球可以被拖到屏幕外，一旦拖出去就再也点不到 ——
+// 而悬浮球正是打开主界面的主要入口（托盘只是兜底），这是个能把用户卡死的坑。
+//
+// 用 getDisplayNearestPoint 而不是 getPrimaryDisplay，是为了多显示器下仍能
+// 正常把球从一块屏拖到另一块屏，同时又不会越出任何一块屏的边界。
+//
+// 注意拖动位置是按「起点 + 本次指针位移」算的（不是逐帧累加），所以贴边之后
+// 往回拖会立刻跟随，不会出现「粘在边上」的手感问题。
+function clampToWorkArea(x, y) {
+  const px = Math.round(x);
+  const py = Math.round(y);
+  const wa = screen.getDisplayNearestPoint({
+    x: px + Math.round(BALL_SIZE / 2),
+    y: py + Math.round(BALL_SIZE / 2)
+  }).workArea;
+  return {
+    x: Math.min(Math.max(px, wa.x), wa.x + wa.width - BALL_SIZE),
+    y: Math.min(Math.max(py, wa.y), wa.y + wa.height - BALL_SIZE)
+  };
+}
+
 // 移动悬浮球。用 setBounds 而不是 setPosition —— 实测 setBounds 只要 324µs，
 // setPosition 要 741µs，慢 2.25 倍。拖动时一秒要调几十次，这个差别是实打实的。
 // 第三个参数显式传 false，避免平台默认值差异带来的动画。
 function moveBall(x, y) {
   if (!ballWindow) return;
-  ballWindow.setBounds({ x, y, width: BALL_SIZE, height: BALL_SIZE }, false);
+  const p = clampToWorkArea(x, y);
+  ballWindow.setBounds({ x: p.x, y: p.y, width: BALL_SIZE, height: BALL_SIZE }, false);
 }
 
 ipcMain.on('ball:drag-start', (_event, x, y, pointerType) => {

@@ -41,7 +41,10 @@
       box-shadow:
         0 5px 14px rgba(0, 0, 0, 0.18),
         inset 0 0 0 1px rgba(0, 0, 0, 0.03);
-      transition: box-shadow 0.15s ease, transform 0.12s ease;
+      /* 只留阴影过渡：原来还写了 transform 0.12s，但 CSS 与 JS 都没有任何地方
+         给 #ball 设过 transform，属于纯死声明。留着它反而是个陷阱——以后真要用
+         transform 做按压反馈时会莫名其妙多出 0.12s 延迟。 */
+      transition: box-shadow 0.15s ease;
       touch-action: none;
       -webkit-user-drag: none;
       -webkit-touch-callout: none;
