@@ -1,0 +1,42 @@
+var EFFECTS_DATA = {
+  "兵荒马乱": {
+    "themeClass": "black-bg",
+    "audioSrc": "assets/audio/xn.mp3",
+    "audioText": "正在播放: 兵荒马乱",
+    "audioLoop": true
+  },
+  "color:（": {
+    "themeClass": "color-bg"
+  },
+  "克沙": {
+    "backgroundImage": "assets/img/04.png",
+    "audioSrc": "assets/audio/sk.mp3",
+    "audioText": "正在播放: 克沙音效"
+  },
+  "东北第一家族嫡长子": {
+    "audioSrc": "assets/audio/td.mp3",
+    "audioText": "正在播放: 东北第一家族嫡长子音效"
+  },
+  "？抽我干嘛？": {
+    "backgroundImage": "assets/img/114514.png"
+  },
+  "李大白": {
+    "themeClass": "li-bg"
+  },
+  "找一名": {
+    "backgroundImage": "assets/img/01.png"
+  },
+  "Kobe Bryant": {
+    "backgroundImage": "assets/img/02.png",
+    "audioSrc": "assets/audio/man.mp3",
+    "audioText": "正在播放: Kobe Bryant音效"
+  },
+  "elephant": {
+    "backgroundImage": "assets/img/03.png",
+    "audioSrc": "assets/audio/ee.mp3",
+    "audioText": "正在播放: Elephant 音效"
+  },
+  "一条佳代子厨": {
+    "backgroundImage": "assets/img/05.png"
+  }
+};

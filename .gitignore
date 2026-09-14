@@ -1,0 +1,21 @@
+# 依赖（452MB，由 npm install 还原）
+electron/node_modules/
+
+# 构建产物（374MB，由 npm run pack 生成）
+electron/dist/
+
+# 站点整站快照压缩包（27MB，内容与本目录重复）
+names.zip
+
+# 编辑器 / 操作系统
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~
+
+# 日志
+*.log
+
+# 助手工作目录（本地记忆，非项目源码）
+.workbuddy-ai/

@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>谁是幸运儿</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      background: transparent;
+      overflow: hidden;
+      touch-action: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      display: grid;
+      place-items: center;
+      font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    }
+
+    #ball {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      cursor: grab;
+      display: grid;
+      place-items: center;
+      background: #ffffff;
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      box-shadow:
+        0 5px 14px rgba(0, 0, 0, 0.18),
+        inset 0 0 0 1px rgba(0, 0, 0, 0.03);
+      transition: box-shadow 0.15s ease, transform 0.12s ease;
+      touch-action: none;
+      -webkit-user-drag: none;
+      -webkit-touch-callout: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    #ball:hover {
+      box-shadow:
+        0 7px 18px rgba(0, 0, 0, 0.22),
+        inset 0 0 0 1px rgba(0, 0, 0, 0.03);
+    }
+
+    #ball:active {
+      cursor: grabbing;
+    }
+
+    #ball span {
+      pointer-events: none;
+      color: #bf2f4d;
+      font-weight: 800;
+      font-size: 12px;
+      letter-spacing: 0.02em;
+      line-height: 1;
+    }
+  </style>
+</head>
+<body>
+  <div id="ball" title="点击打开「谁是幸运儿」，按住可移动">
+    <span>幸运儿</span>
+  </div>
+
+  <script>
+    (function () {
+      var ball = document.getElementById('ball');
+      var api = window.desktopBall;
+
+      var DRAG_SLOP = 25; // 平方后的阈值，约 5px
+
+      var pressed = false;
+      var moved = false;
+      var startX = 0;
+      var startY = 0;
+
+      function sendDragStart(x, y, pointerType) {
+        if (api && api.dragStart) api.dragStart(x, y, pointerType);
+      }
+
+      function sendDragMove(x, y, pointerType) {
+        if (api && api.dragMove) api.dragMove(x, y, pointerType);
+      }
+
+      ball.addEventListener('pointerdown', function (e) {
+        // 鼠标只响应左键；触摸 / 笔尖一律放行，避免个别设备上报异常 button 值
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+
+        pressed = true;
+        moved = false;
+        startX = e.screenX;
+        startY = e.screenY;
+
+        sendDragStart(e.screenX, e.screenY, e.pointerType || 'mouse');
+
+        try {
+          ball.setPointerCapture(e.pointerId);
+        } catch (_err) {}
+
+        e.preventDefault();
+      });
+
+      ball.addEventListener('pointermove', function (e) {
+        if (!pressed) return;
+
+        var dx = e.screenX - startX;
+        var dy = e.screenY - startY;
+
+        if (!moved && dx * dx + dy * dy > DRAG_SLOP) {
+          moved = true;
+        }
+        if (!moved) return;
+
+        sendDragMove(e.screenX, e.screenY, e.pointerType || 'mouse');
+        e.preventDefault();
+      });
+
+      function endDrag(openWhenTap) {
+        if (!pressed) return;
+        pressed = false;
+
+        if (api && api.dragEnd) api.dragEnd();
+
+        if (openWhenTap && !moved && api && api.open) {
+          api.open();
+        }
+        moved = false;
+      }
+
+      ball.addEventListener('pointerup', function (e) {
+        endDrag(true);
+        e.preventDefault();
+      });
+
+      // 触摸被系统或浏览器中断时，干净地结束拖动，且不误触打开
+      ball.addEventListener('pointercancel', function () {
+        endDrag(false);
+      });
+
+      // 触摸长按不弹右键菜单
+      ball.addEventListener('contextmenu', function (e) {
+        e.preventDefault();
+      });
+    })();
+  </script>
+</body>
+</html>

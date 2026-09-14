@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>谁是幸运儿</title>
+  <link rel="stylesheet" href="assets/css/style.css" />
+</head>
+<body>
+  <div class="container">
+    <div class="decoration star1">★</div>
+    <div class="decoration star2">✦</div>
+    <div class="decoration heart">❤</div>
+
+    <div class="box">
+      <h1>谁是幸运儿</h1>
+      <p class="subtitle">今天的主角，会是你吗？（反正不是我）</p>
+
+      <div class="mode-row">
+        <button class="mode-badge" id="modeBadge" type="button" title="点击切换模式">趣味模式</button>
+      </div>
+
+      <div class="name-display">
+        <div class="name" id="nameDisplay">点击开始</div>
+      </div>
+
+      <div class="speed-wrap">
+        <div class="speed-label">
+          <span>慢</span>
+          <span>滚动速度</span>
+          <span>快</span>
+        </div>
+        <input id="speedControl" type="range" min="5" max="600" step="5" value="525" />
+      </div>
+
+      <button class="btn" id="startBtn" type="button">开始抽签</button>
+    </div>
+  </div>
+
+  <button class="music-control" id="musicControl" type="button" title="静音/取消静音" aria-label="静音控制"></button>
+  <button class="admin-toggle" id="adminToggle" type="button" title="管理员模式" aria-label="管理员模式">管</button>
+  <button class="settings-toggle" id="settingsToggle" type="button" title="设置" aria-label="设置">⚙</button>
+  <button class="settings-toggle effects-toggle" id="effectsToggle" type="button" title="特效管理" aria-label="特效管理">✦</button>
+
+  <div class="admin-panel" id="adminPanel">
+    <div class="admin-row admin-title">管理员模式</div>
+    <div class="admin-row">
+      <select id="adminNameSelect" class="admin-select"></select>
+    </div>
+    <div class="admin-actions">
+      <button class="admin-btn primary" id="adminApplyBtn" type="button">直接显示</button>
+      <button class="admin-btn ghost" id="adminExitBtn" type="button">退出</button>
+    </div>
+  </div>
+
+  <div class="settings-overlay" id="settingsOverlay">
+    <div class="settings-panel">
+      <div class="settings-head">
+        <h2>设置</h2>
+        <button class="settings-close" id="settingsClose" type="button" aria-label="关闭">✕</button>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">趣味模式 · 名单</div>
+        <p class="settings-hint">每行一个名字。</p>
+        <textarea id="settingsFunNames" class="settings-textarea" rows="5" placeholder="每行一个名字"></textarea>
+        <div class="settings-actions">
+          <span class="settings-count" id="funCount">0 项</span>
+          <button class="settings-btn" id="funSave" type="button">保存名单</button>
+          <button class="settings-btn ghost" id="funReset" type="button">恢复默认</button>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">学号+名字模式 · 名单</div>
+        <p class="settings-hint">每行一个；写成「12&nbsp;张三」可指定学号，否则自动编号。</p>
+        <textarea id="settingsStudentNames" class="settings-textarea" rows="5" placeholder="每行一个，如 12 张三"></textarea>
+        <div class="settings-actions">
+          <span class="settings-count" id="studentListCount">0 项</span>
+          <button class="settings-btn" id="studentNamesSave" type="button">保存名单</button>
+          <button class="settings-btn ghost" id="studentNamesReset" type="button">恢复默认</button>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">学号+名字模式 · 编号规则</div>
+        <p class="settings-hint">用于学号模式的自动编号；在主界面顶部点击「模式」按钮即可切换。</p>
+        <div class="settings-grid">
+          <label>起始学号 <input type="number" id="studentStart" min="1" step="1" placeholder="1"></label>
+          <label>补齐位数 <input type="number" id="studentPad" min="1" step="1" placeholder="可选，如 2"></label>
+          <label>前缀 <input type="text" id="studentPrefix" placeholder="可选，如 2023"></label>
+          <label>后缀 <input type="text" id="studentSuffix" placeholder="可选"></label>
+        </div>
+        <div class="settings-actions">
+          <span class="settings-count" id="studentCount"></span>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <label class="settings-switch">
+          <input type="checkbox" id="announceToggle" />
+          <span>播报抽中的名字（语音朗读）</span>
+        </label>
+      </div>
+
+      <div class="settings-actions bottom">
+        <button class="btn" id="settingsSave" type="button">保存设置</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="settings-overlay" id="effectsOverlay">
+    <div class="settings-panel effects-panel">
+      <div class="settings-head">
+        <h2>特效管理</h2>
+        <button class="settings-close" id="effectsClose" type="button" aria-label="关闭">✕</button>
+      </div>
+      <p class="settings-hint">特效绑定到名字：抽中某名字时应用对应特效。主题可选“黑底/彩底/葡萄/白底”，背景和音频填资源路径（如 assets/img/01.png、assets/audio/xn.mp3）。</p>
+      <div id="effectsList" class="effects-list"></div>
+      <div class="settings-actions">
+        <button class="settings-btn ghost" id="effectsAdd" type="button">+ 新增特效</button>
+        <button class="settings-btn ghost" id="effectsReset" type="button">恢复默认</button>
+        <button class="btn" id="effectsSave" type="button">保存特效</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="audio-indicator" id="audioIndicator"></div>
+  <button class="ball-return" id="ballReturn" type="button" aria-label="回到悬浮球">✕ 回到悬浮球</button>
+  <audio id="effectAudio"></audio>
+
+  <!-- 数据文件 -->
+  <script src="data/names.js"></script>
+  <script src="data/effects.js"></script>
+  <!-- 主逻辑 -->
+  <script src="assets/js/app.js"></script>
+  <script>
+    (function () {
+      if (!window.desktopBall) return;
+      var btn = document.getElementById("ballReturn");
+      if (!btn) return;
+      btn.style.display = "flex";
+      btn.addEventListener("click", function () {
+        window.desktopBall.returnToBall();
+      });
+    })();
+  </script>
+</body>
+</html>

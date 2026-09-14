@@ -1,0 +1,45 @@
+﻿{
+  "兵荒马乱": {
+    "themeClass": "black-bg",
+    "audioSrc": "xn.mp3",
+    "audioText": "正在播放: 兵荒马乱",
+    "audioLoop": true
+  },
+  "color:？": {
+    "themeClass": "color-bg"
+  },
+  "color:（": {
+    "themeClass": "color-bg"
+  },
+  "沙客": {
+    "backgroundImage": "04.png",
+    "audioSrc": "sk.mp3",
+    "audioText": "正在播放: 沙客音效"
+  },
+  "土豆": {
+    "audioSrc": "td.mp3",
+    "audioText": "正在播放: 土豆音效"
+  },
+  "葡萄干": {
+    "themeClass": "grape-bg"
+  },
+  "李大白": {
+    "themeClass": "li-bg"
+  },
+  "找一名": {
+    "backgroundImage": "01.png"
+  },
+  "曼巴": {
+    "backgroundImage": "02.png",
+    "audioSrc": "man.mp3",
+    "audioText": "正在播放: 曼巴音效"
+  },
+  "elephant": {
+    "backgroundImage": "03.png",
+    "audioSrc": "ee.mp3",
+    "audioText": "正在播放: Elephant 音效"
+  },
+  "鲤鱼": {
+    "backgroundImage": "05.png"
+  }
+}

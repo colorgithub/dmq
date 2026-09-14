@@ -1,0 +1,49 @@
+{
+  "name": "lucky-ball",
+  "version": "1.0.0",
+  "description": "谁是幸运儿 - 右下角悬浮球桌面版",
+  "main": "main.js",
+  "author": "dmq.colordev.space",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "genicon": "node scripts/gen-icon.js",
+    "pack": "electron-builder --win portable",
+    "dist": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "space.colordev.dmq.luckyball",
+    "productName": "谁是幸运儿",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "ball.html",
+      "build/icon.png",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "webapp",
+        "to": "webapp"
+      }
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": false,
+      "target": [
+        "portable"
+      ]
+    },
+    "portable": {
+      "artifactName": "谁是幸运儿-悬浮球.exe"
+    }
+  }
+}
