@@ -514,7 +514,7 @@
   }
 
   function updateCard(card, item) {
-    card.style.setProperty("--rarity", NAME_COLOR);
+    card.style.setProperty("--name-color", NAME_COLOR);
     if (item.id) {
       card._id.textContent = item.id;
       card._id.hidden = false;
@@ -593,7 +593,7 @@
     history.forEach(function (h) {
       var li = document.createElement("li");
       li.className = "history-item";
-      li.style.setProperty("--rarity", NAME_COLOR);
+      li.style.setProperty("--name-color", NAME_COLOR);
 
       var dot = document.createElement("span");
       dot.className = "history-dot";

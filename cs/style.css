@@ -17,10 +17,10 @@
   --pointer-glow: rgba(253, 224, 71, 0.78);
 
   /* 所有人的颜色统一为红色（CS2 稀有度配色已整体去掉）。
-     卡片、放大镜、结果卡、历史圆点都走这两个变量；JS 会按卡片再写一次 --rarity，
-     这里只是兜底默认值 —— 否则卡片还没渲染时 var(--rarity) 取不到值，背景会变透明。 */
+     卡片、放大镜、结果卡、历史圆点都走这两个变量；JS 会按卡片再写一次 --name-color，
+     这里只是兜底默认值 —— 否则卡片还没渲染时 var(--name-color) 取不到值，背景会变透明。 */
   --name-red: #eb4b4b;
-  --rarity: var(--name-red);
+  --name-color: var(--name-red);
   --win-color: var(--name-red);
 
   --card-w: 256px;
@@ -293,7 +293,7 @@ body {
   padding: 12px;
 }
 
-/* 稀有度底色辉光 */
+/* 卡片底部辉光（颜色统一走 --name-color，不再按稀有度分档） */
 .card-inner::before {
   content: "";
   position: absolute;
@@ -302,12 +302,12 @@ body {
   width: 120%;
   height: 70%;
   transform: translateX(-50%);
-  background: radial-gradient(ellipse at center, var(--rarity) 0%, transparent 70%);
+  background: radial-gradient(ellipse at center, var(--name-color) 0%, transparent 70%);
   opacity: 0.45;
   pointer-events: none;
 }
 
-/* 稀有度底条 */
+/* 卡片底条（同上，全员同一个颜色） */
 .card-inner::after {
   content: "";
   position: absolute;
@@ -315,7 +315,7 @@ body {
   right: 0;
   bottom: 0;
   height: 4px;
-  background: var(--rarity);
+  background: var(--name-color);
 }
 
 .card-name {
@@ -350,8 +350,8 @@ body {
 
 /* 中奖卡高亮 */
 .card.is-winner .card-inner {
-  border-color: var(--rarity);
-  box-shadow: 0 0 26px -4px var(--rarity);
+  border-color: var(--name-color);
+  box-shadow: 0 0 26px -4px var(--name-color);
 }
 
 /* ---------- 状态与按钮 ---------- */
@@ -528,7 +528,7 @@ body {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--rarity);
+  background: var(--name-color);
   flex: 0 0 auto;
 }
 
