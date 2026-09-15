@@ -16,6 +16,13 @@
   --pointer: rgba(254, 240, 138, 0.9);
   --pointer-glow: rgba(253, 224, 71, 0.78);
 
+  /* 所有人的颜色统一为红色（CS2 稀有度配色已整体去掉）。
+     卡片、放大镜、结果卡、历史圆点都走这两个变量；JS 会按卡片再写一次 --rarity，
+     这里只是兜底默认值 —— 否则卡片还没渲染时 var(--rarity) 取不到值，背景会变透明。 */
+  --name-red: #eb4b4b;
+  --rarity: var(--name-red);
+  --win-color: var(--name-red);
+
   --card-w: 256px;
   --strip-h: 192px;
   --lens-size: 256px;

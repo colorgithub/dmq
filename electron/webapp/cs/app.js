@@ -4,7 +4,9 @@
  *   - 滚轮 62 张卡，中奖卡固定在第 46 张（0 基）
  *   - 缓动 cubic-bezier(0.08, 0.72, 0.05, 1)，主滚动 5200ms，另有 160ms 起手
  *   - 落点公式：center - (46 * cardW + cardW * (0.18 + 0.64 * rand))
- *   - 稀有度中文名 / 官方色 / 真实掉率均取自该站 bundle
+ *
+ * 等级（CS2 稀有度）已整体去掉：不再有稀有度中文名 / 分档配色 / 按稀有度的揭晓音阶，
+ * 所有人的颜色统一为 NAME_COLOR 这一个红，揭晓音效也只有一种。
  *
  * 与主站共用：localStorage 键 lucky_settings_v1（模式、名单、学号规则）
  * 与 data/names.json（失败时回退到 script 引入的 NAMES_DATA）
@@ -28,25 +30,10 @@
   var SOUND_KEY = "cs_picker_sound_v1";
   var HISTORY_MAX = 12;
 
-  // CS2 稀有度：中文名 + 官方色 + 掉率（由稀到常见）
-  var TIERS = [
-    { key: "contraband", cn: "违禁", color: "#d4a848", p: 0.0026 },
-    { key: "covert", cn: "隐秘", color: "#eb4b4b", p: 0.0064 },
-    { key: "classified", cn: "保密", color: "#d32ce6", p: 0.0320 },
-    { key: "restricted", cn: "受限", color: "#8847ff", p: 0.1602 },
-    { key: "milspec", cn: "军规级", color: "#4b69ff", p: 0.7988 }
-  ];
-  var TIER_BY_KEY = {};
-  TIERS.forEach(function (t) { TIER_BY_KEY[t.key] = t; });
-
-  // 揭晓音阶（由稀到常见，越稀有音阶越长）
-  var FANFARE = {
-    contraband: [523.25, 659.25, 783.99, 1046.50, 1318.51],
-    covert: [523.25, 659.25, 783.99, 1046.50],
-    classified: [440.00, 554.37, 659.25],
-    restricted: [392.00, 523.25],
-    milspec: [392.00]
-  };
+  // 所有人的颜色都一样：统一红色。
+  // 原来是按 CS2 稀有度给每个人分配颜色（违禁金 / 隐秘红 / 保密紫 / 受限紫 / 军规蓝），
+  // 现在等级已经去掉，卡片、放大镜、结果卡、历史圆点全部用这一个红。
+  var NAME_COLOR = "#eb4b4b";
 
   // ==================== DOM ====================
 
@@ -73,8 +60,8 @@
   // ==================== 状态 ====================
 
   var baseNames = [];              // 内置名单（JSON 优先，script 兜底）
-  var roster = [];                 // 当前生效名单 [{id, name, tier}]
-  var history = [];                // [{name, id, tier}]
+  var roster = [];                 // 当前生效名单 [{id, name}]
+  var history = [];                // [{name, id}]
   var winnerCards = [];            // 本轮中奖卡元素
   var spinning = false;
   var soundOn = true;
@@ -152,29 +139,6 @@
 
   var easeFn = cubicBezier(0.08, 0.72, 0.05, 1);
 
-  // ==================== 稀有度 ====================
-
-  // FNV-1a：让同一个人永远拿到同一张卡（颜色稳定，滚轮观感才不花）
-  function hashUnit(str) {
-    var h = 2166136261;
-    var s = String(str);
-    for (var i = 0; i < s.length; i++) {
-      h ^= s.charCodeAt(i);
-      h = Math.imul(h, 16777619);
-    }
-    return ((h >>> 0) % 1000000) / 1000000;
-  }
-
-  function tierForName(name) {
-    var r = hashUnit(name);
-    var acc = 0;
-    for (var i = 0; i < TIERS.length; i++) {
-      acc += TIERS[i].p;
-      if (r < acc) return TIERS[i];
-    }
-    return TIERS[TIERS.length - 1];
-  }
-
   // ==================== 名单 ====================
 
   function normalizeNames(data) {
@@ -242,7 +206,7 @@
         list.push({ id: String(id), name: p.name });
       }
       return list.map(function (r) {
-        return { id: r.id, name: r.name, tier: tierForName(r.name) };
+        return { id: r.id, name: r.name };
       });
     }
 
@@ -254,7 +218,7 @@
       t = String(src[i] || "").trim();
       if (!t || seen[t]) continue;
       seen[t] = 1;
-      list.push({ id: null, name: t, tier: tierForName(t) });
+      list.push({ id: null, name: t });
     }
     return list;
   }
@@ -319,7 +283,7 @@
       var arr = raw ? JSON.parse(raw) : null;
       if (!Array.isArray(arr)) return [];
       return arr.filter(function (h) {
-        return h && typeof h.name === "string" && TIER_BY_KEY[h.tier];
+        return h && typeof h.name === "string";
       }).slice(0, HISTORY_MAX);
     } catch (e) { return []; }
   }
@@ -348,13 +312,75 @@
 
   function unlockAudio() { ac(); }
 
-  function blip(ctx, freq, when, dur, gain, type) {
+  // ---------- CS:GO 开箱音效（全部现场合成，不依赖素材文件） ----------
+  //
+  // 参考 CS:GO 开箱的两段声音：
+  //   1) 滚轮转动时连续的「咔哒」——干、短、偏机械，没有音乐性的音高。
+  //      所以用极短的带通噪声脉冲来做；原来的方波 blip 听感太"电子"。
+  //   2) 揭晓瞬间——一股由低扫到高的气流推上来，紧接一记金属感的钟声和低频落地，
+  //      这样才像"箱子开了"；原来只是按稀有度播一段音阶，更像捡到金币。
+  // 等级去掉之后揭晓只剩一种声音，不再按稀有度分档。
+
+  var noiseBuf = null;
+
+  // 白噪声缓冲只生成一次，之后所有噪声类音效共用
+  function getNoise(ctx) {
+    if (noiseBuf && noiseBuf.sampleRate === ctx.sampleRate) return noiseBuf;
+    var len = Math.max(1, Math.floor(ctx.sampleRate * 0.5));
+    var buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    var d = buf.getChannelData(0);
+    for (var i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    noiseBuf = buf;
+    return buf;
+  }
+
+  // 带通噪声脉冲：开箱滚轮「咔哒」的本体
+  function noiseHit(ctx, when, dur, freq, q, gain) {
+    var src = ctx.createBufferSource();
+    src.buffer = getNoise(ctx);
+    var bp = ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.Q.value = q;
+    bp.frequency.setValueAtTime(freq, when);
+    var g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, when);
+    g.gain.linearRampToValueAtTime(gain, when + 0.002);
+    g.gain.exponentialRampToValueAtTime(0.0001, when + dur);
+    src.connect(bp);
+    bp.connect(g);
+    g.connect(ctx.destination);
+    src.start(when);
+    src.stop(when + dur + 0.02);
+  }
+
+  // 由低扫到高的气流声，给揭晓一个「推上来」的势
+  function riser(ctx, when, dur, gain) {
+    var src = ctx.createBufferSource();
+    src.buffer = getNoise(ctx);
+    var bp = ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.Q.value = 1.8;
+    bp.frequency.setValueAtTime(420, when);
+    bp.frequency.exponentialRampToValueAtTime(5200, when + dur);
+    var g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, when);
+    g.gain.linearRampToValueAtTime(gain, when + dur * 0.8);
+    g.gain.exponentialRampToValueAtTime(0.0001, when + dur);
+    src.connect(bp);
+    bp.connect(g);
+    g.connect(ctx.destination);
+    src.start(when);
+    src.stop(when + dur + 0.02);
+  }
+
+  // 钟声的一个分音（指数衰减）
+  function bell(ctx, freq, when, dur, gain) {
     var osc = ctx.createOscillator();
     var g = ctx.createGain();
-    osc.type = type || "triangle";
+    osc.type = "sine";
     osc.frequency.setValueAtTime(freq, when);
     g.gain.setValueAtTime(0.0001, when);
-    g.gain.linearRampToValueAtTime(gain, when + 0.004);
+    g.gain.linearRampToValueAtTime(gain, when + 0.005);
     g.gain.exponentialRampToValueAtTime(0.0001, when + dur);
     osc.connect(g);
     g.connect(ctx.destination);
@@ -362,26 +388,56 @@
     osc.stop(when + dur + 0.03);
   }
 
+  // 低频落地感：让揭晓有重量
+  function thump(ctx, when, dur, gain) {
+    var osc = ctx.createOscillator();
+    var g = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(170, when);
+    osc.frequency.exponentialRampToValueAtTime(62, when + dur);
+    g.gain.setValueAtTime(0.0001, when);
+    g.gain.linearRampToValueAtTime(gain, when + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, when + dur);
+    osc.connect(g);
+    g.connect(ctx.destination);
+    osc.start(when);
+    osc.stop(when + dur + 0.03);
+  }
+
+  // 滚轮转动时的一记「咔哒」：高频噪声脉冲 + 一记很轻的低频闷响
   function playTick() {
     if (!soundOn) return;
     var ctx = ac();
     if (!ctx) return;
-    blip(ctx, 1400 + Math.random() * 500, ctx.currentTime, 0.04, 0.045, "square");
+    var t = ctx.currentTime;
+    noiseHit(ctx, t, 0.035, 2200 + Math.random() * 1500, 1.1, 0.055);
+    thump(ctx, t, 0.05, 0.03);
   }
 
-  function playReveal(tier) {
+  // 揭晓：锁扣声 → 气流 → 低频落地 → 金属钟声
+  function playReveal() {
     if (!soundOn) return;
     var ctx = ac();
     if (!ctx) return;
-    var notes = FANFARE[tier.key] || [392];
-    var t0 = ctx.currentTime + 0.02;
-    var step = 0.085;
-    for (var i = 0; i < notes.length; i++) {
-      blip(ctx, notes[i], t0 + i * step, 0.5, 0.10, "triangle");
-      blip(ctx, notes[i] * 2, t0 + i * step, 0.32, 0.03, "sine");
-    }
-    if (tier.key === "covert" || tier.key === "contraband") {
-      blip(ctx, notes[0] / 2, t0, 1.4, 0.075, "sine");
+    var t0 = ctx.currentTime + 0.01;
+
+    // 滚轮停住的那一下，比普通 tick 更实
+    noiseHit(ctx, t0, 0.05, 1500, 0.9, 0.075);
+    thump(ctx, t0, 0.12, 0.06);
+
+    // 气流推上来
+    riser(ctx, t0 + 0.02, 0.30, 0.05);
+
+    // 落地 + 钟声（分音刻意不成谐波关系，才有金属味）
+    thump(ctx, t0 + 0.20, 0.34, 0.11);
+    var partials = [
+      [1046.50, 1.30, 0.075],
+      [1567.98, 1.05, 0.048],
+      [2093.00, 0.85, 0.032],
+      [3135.96, 0.60, 0.018]
+    ];
+    for (var i = 0; i < partials.length; i++) {
+      bell(ctx, partials[i][0], t0 + 0.21 + i * 0.012, partials[i][1], partials[i][2]);
     }
   }
 
@@ -427,7 +483,7 @@
 
   // ==================== 滚轮渲染 ====================
 
-  // 卡片池：两条滚轮各 62 张，抽签时只改文字与稀有度色，不重建 DOM。
+  // 卡片池：两条滚轮各 62 张，抽签时只改文字与颜色，不重建 DOM。
   // 早先每次抽签要新建约 370 个节点再全部销毁，现在新建数为 0。
   var pool = { strip: [], lens: [] };
 
@@ -458,7 +514,7 @@
   }
 
   function updateCard(card, item) {
-    card.style.setProperty("--rarity", item.tier.color);
+    card.style.setProperty("--rarity", NAME_COLOR);
     if (item.id) {
       card._id.textContent = item.id;
       card._id.hidden = false;
@@ -535,10 +591,9 @@
   function renderHistory() {
     historyList.textContent = "";
     history.forEach(function (h) {
-      var tier = TIER_BY_KEY[h.tier] || TIERS[TIERS.length - 1];
       var li = document.createElement("li");
       li.className = "history-item";
-      li.style.setProperty("--rarity", tier.color);
+      li.style.setProperty("--rarity", NAME_COLOR);
 
       var dot = document.createElement("span");
       dot.className = "history-dot";
@@ -548,21 +603,28 @@
 
       li.appendChild(dot);
       li.appendChild(text);
-      li.title = tier.cn;
       historyList.appendChild(li);
     });
     historyEmpty.hidden = history.length > 0;
   }
 
   function pushHistory(winner) {
-    history.unshift({ name: winner.name, id: winner.id, tier: winner.tier.key });
+    history.unshift({ name: winner.name, id: winner.id });
     if (history.length > HISTORY_MAX) history.length = HISTORY_MAX;
     saveHistory();
     renderHistory();
   }
 
   function showResult(winner) {
-    resultTag.textContent = (winner.id ? winner.id + " · " : "") + winner.tier.cn;
+    // 原来这一行是「学号 · 稀有度」。等级去掉之后这里只剩学号，
+    // 趣味模式下没有学号，就把整行收起来，免得结果卡上多一条空白。
+    if (winner.id) {
+      resultTag.textContent = winner.id;
+      resultTag.hidden = false;
+    } else {
+      resultTag.textContent = "";
+      resultTag.hidden = true;
+    }
     resultName.textContent = winner.name;
     resultEl.hidden = false;
     // 重放弹出动画。pop 的终态就是基础样式（opacity:1 / transform:none），
@@ -592,10 +654,11 @@
 
   // 全应用唯一的抽取点，必须保持均匀：每人概率严格相等（1 / roster.length）。
   //
-  // 这里是「不分等级」这个约定的唯一归属地 —— 稀有度（tier）只是抽完之后贴上去的
-  // 展示标签，只影响卡片配色、结果文案和揭晓音效，**绝不参与抽取，也不影响概率**。
-  // 想在抽取里引入任何权重（比如让稀有度高的人更少出现），都必须先改这里，
-  // 而改这里就等于明确地推翻上面的约定。
+  // 这里是「每人等概率」这个约定的唯一归属地。想在这里引入任何权重（比如让某几个人
+  // 更容易被抽到），都必须先改这里，而改这里就等于明确地推翻上面的约定。
+  //
+  // 注：原来还挂着「稀有度」这层展示概念，现已按用户要求整体去掉 ——
+  // 所有人的颜色统一为红色，抽取本身从来就没有权重，去掉后更没有。
   function pickWinner() {
     return roster[Math.floor(Math.random() * roster.length)];
   }
@@ -668,20 +731,20 @@
     applyCards(endCards);
 
     winnerCards.forEach(function (el) { el.classList.add("is-winner"); });
-    root.style.setProperty("--win-color", winner.tier.color);
+    root.style.setProperty("--win-color", NAME_COLOR);
 
     showResult(winner);
-    setStatus("★ " + winner.tier.cn + " ★", "is-win");
-    // 状态条只报稀有度，人名单独播给屏幕阅读器
+    setStatus("★ 开箱完成 ★", "is-win");
+    // 状态条只报状态，人名单独播给屏幕阅读器
     if (srAnnounce) {
-      srAnnounce.textContent = "抽中 " + (winner.id ? winner.id + " " : "") + winner.name + "，" + winner.tier.cn;
+      srAnnounce.textContent = "抽中 " + (winner.id ? winner.id + " " : "") + winner.name;
     }
 
     openBtn.disabled = false;
     openBtnLabel.textContent = "再来一次";
 
     pushHistory(winner);
-    playReveal(winner.tier);
+    playReveal();
     speak(winner.name, 900);
   }
 
