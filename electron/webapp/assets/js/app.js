@@ -744,6 +744,12 @@ function showSpecificName(name) {
 function syncMusicButton() {
   musicControl.classList.toggle("muted", muted);
   musicControl.innerHTML = muted ? mutedSvg : speakerSvg;
+  // 这是个切换按钮，但它的状态原来**只通过视觉暴露**（.muted 改透明度 + 换图标），
+  // 读屏用户听到的永远是「静音控制，按钮」，不知道现在是静音还是没静音。
+  // aria-pressed 才是切换按钮表达「按下/未按下」的标准做法。
+  // 同页的 #modeBadge 靠文字变化、CS 页的 soundBtn 靠「音效 开/关」都暴露了状态，
+  // 只有这个按钮漏了。
+  musicControl.setAttribute("aria-pressed", muted ? "true" : "false");
 }
 
 // ========== 事件绑定 ==========
