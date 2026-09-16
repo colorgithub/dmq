@@ -30,6 +30,9 @@
               <span>自定义</span>
               <input type="color" id="colorCustom" value="#eb4b4b" aria-label="自定义名字颜色">
             </label>
+            <button class="color-more" id="nameColorBtn" type="button" aria-haspopup="dialog">
+              逐人颜色…
+            </button>
           </div>
         </div>
         <button class="chip chip-btn" id="soundBtn" type="button">音效 开</button>
@@ -78,6 +81,24 @@
       <ol class="history-list" id="historyList"></ol>
       <p class="history-empty" id="historyEmpty">还没有记录</p>
     </section>
+  </div>
+
+  <!-- 逐人颜色弹层。必须是 body 的直接子元素 —— syncModalInert() 靠扫 body.children
+       给「除了弹层以外的一切」加 inert。放在 .page 里面的话 inert 会把弹层自己也罩住。 -->
+  <div class="nc-modal" id="nameColorModal" role="dialog" aria-modal="true"
+       aria-labelledby="nameColorTitle" hidden>
+    <div class="nc-panel">
+      <div class="nc-head">
+        <h2 class="nc-title" id="nameColorTitle">逐人颜色</h2>
+        <button class="nc-close" id="nameColorClose" type="button" aria-label="关闭逐人颜色">✕</button>
+      </div>
+      <p class="nc-note">
+        没单独设色的人跟随默认色。
+        <span class="nc-summary" id="nameColorSummary">都跟随默认色</span>
+        <button class="nc-reset-all" id="nameColorResetAll" type="button">全部恢复默认</button>
+      </p>
+      <ul class="nc-list" id="nameColorList"></ul>
+    </div>
   </div>
 
   <script src="../data/names.js"></script>

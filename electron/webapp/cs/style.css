@@ -2,6 +2,10 @@
    核心：全宽模糊滚轮做景深 + 中心 256px 圆形放大镜 + 1px 黄色发光指针 */
 
 :root {
+  /* 页面本身就是深色。声明 color-scheme 让原生部件（滚动条、取色对话框、
+     表单控件）也跟着走深色 —— 否则弹层列表里会挂着一条亮色滚动条。 */
+  color-scheme: dark;
+
   --bg: #10110f;
   --surface: #181a17;
   --surface-2: #22251f;
@@ -16,9 +20,10 @@
   --pointer: rgba(254, 240, 138, 0.9);
   --pointer-glow: rgba(253, 224, 71, 0.78);
 
-  /* 所有人的颜色统一为红色（CS2 稀有度配色已整体去掉）。
-     卡片、放大镜、结果卡、历史圆点都走这两个变量；JS 会按卡片再写一次 --name-color，
-     这里只是兜底默认值 —— 否则卡片还没渲染时 var(--name-color) 取不到值，背景会变透明。 */
+  /* 默认色（名字颜色）。卡片、放大镜、结果卡、历史圆点都走这两个变量；
+     没单独设色的人靠继承拿到这里的值，单独设过色的人由 JS 在自己那一张卡上
+     内联覆盖 --name-color（见 applyCardColor），所以这里只是兜底 ——
+     否则卡片还没渲染时 var(--name-color) 取不到值，背景会变透明。 */
   --name-red: #eb4b4b;
   --name-color: var(--name-red);
   --win-color: var(--name-red);
@@ -199,6 +204,217 @@ body {
   border-radius: 6px;
   background: none;
   cursor: pointer;
+}
+
+/* 下拉面板底部通往「逐人颜色」弹层的入口 */
+.color-more {
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-3);
+  color: var(--text-mid);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.color-more:hover {
+  color: var(--text);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+/* ---------- 逐人颜色弹层 ---------- */
+
+.nc-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.62);
+}
+
+/* 同 .color-pop：作者样式会盖掉 hidden，必须显式兜一层 */
+.nc-modal[hidden] {
+  display: none;
+}
+
+.nc-panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 420px;
+  max-height: 100%;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: 0 26px 70px -18px rgba(0, 0, 0, 0.9);
+  overflow: hidden;
+}
+
+.nc-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.nc-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text);
+}
+
+.nc-close {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text-mid);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.nc-close:hover {
+  color: var(--text);
+}
+
+.nc-note {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.nc-summary {
+  color: var(--text-mid);
+}
+
+.nc-reset-all {
+  margin-left: auto;
+  padding: 4px 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-2);
+  color: var(--text-mid);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.nc-reset-all:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.nc-reset-all:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.nc-list {
+  margin: 0;
+  padding: 6px 10px 10px;
+  list-style: none;
+  overflow-y: auto;
+}
+
+.nc-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 6px;
+  border-radius: 9px;
+  border-left: 3px solid transparent;
+}
+
+/* 单独设过色的人，左侧留一条自己的色带，扫一眼就能看出谁被改过 */
+.nc-row.is-custom {
+  border-left-color: var(--nc-row-color, transparent);
+  background: var(--surface-2);
+}
+
+.nc-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nc-id {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.nc-input {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+}
+
+/* 原生色块自带一圈内边距 + 描边，会把我们画的圆角框撑出一层毛边。
+   去掉之后颜色才真正填满这个框。Electron 是 Chromium，这两个伪元素可用；
+   别的引擎不认也无所谓，只是退回默认外观。两处取色器一起覆盖。 */
+.color-custom input[type="color"]::-webkit-color-swatch-wrapper,
+.nc-input::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.color-custom input[type="color"]::-webkit-color-swatch,
+.nc-input::-webkit-color-swatch {
+  border: none;
+  border-radius: 4px;
+}
+
+.nc-reset {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: none;
+  color: var(--text-dim);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.nc-reset:hover {
+  color: var(--text);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+/* 同 .card-id[hidden]：不写这一条，作者样式的 display 会把 hidden 盖掉 */
+.nc-reset[hidden] {
+  display: none;
+}
+
+.nc-empty {
+  margin: 0;
+  padding: 18px 8px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-dim);
 }
 
 .brand {
@@ -674,6 +890,15 @@ body {
     --lens-size: 160px;
     --pointer-h: 96px;
     --opener-h: 240px;
+  }
+
+  /* 窄屏弹层留白收紧，名单区域自己滚动 */
+  .nc-modal {
+    padding: 12px;
+  }
+
+  .nc-panel {
+    max-width: none;
   }
 
   .page {

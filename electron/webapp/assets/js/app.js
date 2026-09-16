@@ -95,6 +95,9 @@ let settings = {
   // 但主站保存设置是整份覆盖，所以这里必须认识这个键、并在初始化时读回来，
   // 否则用户在 CS 页挑好的颜色会被主站一次「保存设置」抹掉。
   nameColor: "#eb4b4b",
+  // 逐人颜色表 { 名字: "#hex" }，同样由 CS 页编辑。主站不显示名字颜色，
+  // 但必须认识这个键并读回来 —— 否则整份覆盖保存时会把它整个抹掉。
+  nameColors: {},
   effects: {},
   student: { start: 1, pad: "", prefix: "", suffix: "" }
 };
@@ -924,6 +927,7 @@ Promise.all([loadNames(), loadEffects()]).then(async () => {
     if (typeof saved.announce === "boolean") settings.announce = saved.announce;
     // 名字颜色同理：CS 页写进来的值要读回来，否则主站整份覆盖保存时会把它清成默认色。
     if (typeof saved.nameColor === "string") settings.nameColor = saved.nameColor;
+    if (saved.nameColors && typeof saved.nameColors === "object") settings.nameColors = saved.nameColors;
     if (saved.effects && typeof saved.effects === "object") settings.effects = saved.effects;
     if (saved.student && typeof saved.student === "object") {
       settings.student = Object.assign({}, settings.student, saved.student);

@@ -42,6 +42,10 @@
   // 改一处就全变（原来是每张卡各写一次，那是「每人一个颜色」时代留下的写法）。
   var DEFAULT_NAME_COLOR = "#eb4b4b";
   var nameColor = DEFAULT_NAME_COLOR;
+  // 逐人颜色：{ 名字: "#hex" }。**没写在这张表里的名字就跟随默认色 nameColor。**
+  // 键是名字而不是学号 —— 学号模式下的卡片内容是「12 张三」，抽的是名字，
+  // 而且同一个人在两个模式的名单里都该是同一个颜色。
+  var nameColors = {};
 
   // 预设色。除了这几个，还能用系统取色器选任意颜色。
   var COLOR_PRESETS = [
@@ -63,6 +67,31 @@
       return "#" + s[1] + s[1] + s[2] + s[2] + s[3] + s[3];
     }
     return null;
+  }
+
+  // 逐人颜色表来自存储，同样不可信：逐个键值校验，非法的一律丢掉。
+  // 返回普通对象（不是 Object.create(null)），这样 JSON.stringify 和
+  // Object.keys 的行为跟别处一致；代价是要显式跳过 __proto__ 这类键。
+  function sanitizeNameColors(raw) {
+    var out = {};
+    if (!raw || typeof raw !== "object") return out;
+    for (var k in raw) {
+      if (!Object.prototype.hasOwnProperty.call(raw, k)) continue;
+      if (k === "__proto__" || k === "constructor" || k === "prototype") continue;
+      if (!k) continue;
+      var c = normalizeColor(raw[k]);
+      if (c) out[k] = c;
+    }
+    return out;
+  }
+
+  // 这个人有没有**单独**设过颜色。没有就返回 null，表示跟随默认色。
+  // 热路径（每张卡每次刷新都调），所以这里只查表、不做 normalize ——
+  // 进表的值在 sanitizeNameColors / setNameColorFor 里已经规范化过了。
+  function customColorFor(name) {
+    if (!name) return null;
+    var c = nameColors[name];
+    return (typeof c === "string") ? c : null;
   }
 
   // ==================== DOM ====================
@@ -91,6 +120,12 @@
   var colorPop = document.getElementById("colorPop");
   var colorGrid = document.getElementById("colorGrid");
   var colorCustom = document.getElementById("colorCustom");
+  var nameColorBtn = document.getElementById("nameColorBtn");
+  var nameColorModal = document.getElementById("nameColorModal");
+  var nameColorList = document.getElementById("nameColorList");
+  var nameColorClose = document.getElementById("nameColorClose");
+  var nameColorSummary = document.getElementById("nameColorSummary");
+  var nameColorResetAll = document.getElementById("nameColorResetAll");
 
   // ==================== 状态 ====================
 
@@ -101,6 +136,9 @@
   var spinning = false;
   var soundOn = true;
   var colorPopOpen = false;        // 颜色下拉面板是否开着
+  // 当前打开的模态弹层（null = 没开）。用显式变量记录，不从 .show 之类的 class 反推 ——
+  // 反推的做法在「两个弹层互相切换」时会算错，主站那边踩过。
+  var activeModal = null;
   var rafId = 0;
   var resizeRaf = 0;
   // 滚轮逻辑位置，单位＝卡宽。用「卡坐标」而不是像素，
@@ -119,6 +157,9 @@
     // 名字颜色。这是 CS 页**自己的**设置（主站用不到它，但必须原样带过 ——
     // 主站保存设置时是整份覆盖，所以那边也得知道这个键，否则会被抹掉）。
     nameColor: DEFAULT_NAME_COLOR,
+    // 逐人颜色表 { 名字: "#hex" }。和 nameColor 一样属于 CS 页自己的设置，
+    // 但主站必须认识这个键、原样带过（否则整份覆盖会把它抹掉）。
+    nameColors: {},
     // CS 页没有特效界面，这个字段只是为了和主站的设置形状保持一致。
     // 它**不会被写回存储**（见 saveSettings：只合并 mode），所以别指望靠它
     // 覆盖主站的特效配置 —— 那正是之前把用户特效清空的原因。
@@ -302,7 +343,8 @@
     var base = (prev && typeof prev === "object") ? prev : {};
     return Object.assign({}, base, {
       mode: settings.mode,
-      nameColor: nameColor
+      nameColor: nameColor,
+      nameColors: nameColors
     });
   }
 
@@ -556,13 +598,37 @@
     // 缓存子节点引用，刷新时直接改 nodeValue，避免 textContent 重建文本节点
     card._id = idEl;
     card._text = textNode;
+    // 这张卡当前内联写着的逐人颜色（null = 没写、走 :root 继承）。
+    // 用来避免每次刷新都重复写同一个值 —— 见 applyCardColor。
+    card._color = null;
+    card._name = "";
     return card;
   }
 
+  // 把「这个人该用什么颜色」落到卡片上。
+  //
+  // 没单独设过颜色的人 → 卡片上不写这个变量，颜色从 :root 继承（0 次样式写入）。
+  // 设过的人 → 在他自己的卡上写一次覆盖掉继承值。
+  // 关键是先跟 card._color 比一下：同一个人连续刷新、或整批人都是默认色时，
+  // 一次写入都不会发生。所以「没人自定义颜色」的性能跟改造前完全一样。
+  function applyCardColor(card) {
+    var custom = customColorFor(card._name);
+    if (custom === card._color) return;
+    if (custom) card.style.setProperty("--name-color", custom);
+    else card.style.removeProperty("--name-color");
+    card._color = custom;
+  }
+
+  // 默认色或逐人颜色改了之后，把已经渲染出来的卡重新上色
+  function repaintCards() {
+    var i;
+    for (i = 0; i < pool.strip.length; i++) applyCardColor(pool.strip[i]);
+    for (i = 0; i < pool.lens.length; i++) applyCardColor(pool.lens[i]);
+  }
+
   function updateCard(card, item) {
-    // 这里原来会给每张卡各写一次 --name-color（「每人一个颜色」时代的写法）。
-    // 现在全员同色，颜色只写在 :root 上、由卡片继承，所以不必再逐张写 ——
-    // 一次 fillReels() 少 124 次样式写入，而且颜色只有一处真相。
+    card._name = item.name;
+    applyCardColor(card);
     if (item.id) {
       card._id.textContent = item.id;
       card._id.hidden = false;
@@ -641,7 +707,10 @@
     history.forEach(function (h) {
       var li = document.createElement("li");
       li.className = "history-item";
-      // 颜色同上：继承 :root 上的 --name-color，不再逐条写
+      // 单独设过颜色的人，历史条目也跟着用他自己的色；没设过的从 :root 继承。
+      // 历史列表每次都是整段重建的，所以这里直接写一次不影响性能。
+      var hc = customColorFor(h.name);
+      if (hc) li.style.setProperty("--name-color", hc);
 
       var dot = document.createElement("span");
       dot.className = "history-dot";
@@ -779,7 +848,11 @@
     applyCards(endCards);
 
     winnerCards.forEach(function (el) { el.classList.add("is-winner"); });
-    // --win-color 由 applyNameColor() 统一写在 :root 上，不必每次揭晓都写一遍
+    // 结果卡用中奖者自己的色（单独设过的话），否则继承 :root 上的 --win-color。
+    // 每轮揭晓只写一次，不在热路径上。
+    var wc = customColorFor(winner.name);
+    if (wc) resultCard.style.setProperty("--win-color", wc);
+    else resultCard.style.removeProperty("--win-color");
 
     showResult(winner);
     setStatus("★ 开箱完成 ★", "is-win");
@@ -831,6 +904,9 @@
 
   // 把当前颜色写到根元素上。卡片 / 放大镜 / 结果卡 / 历史圆点都继承这两个变量，
   // 所以只改这一处，全页跟着变。
+  // 注意：**单独设过颜色的人不吃这一套** —— 他们的卡片上有自己的内联变量，优先于继承。
+  // 改默认色时不必重刷卡片：跟随默认的那些是靠 CSS 继承自动变的，
+  // 而单独设过色的本来就该保持不变。（逐人颜色表变了才需要重刷，见 setNameColorFor。）
   function applyNameColor() {
     root.style.setProperty("--name-color", nameColor);
     root.style.setProperty("--win-color", nameColor);
@@ -881,6 +957,166 @@
     settings.nameColor = c;
     applyNameColor();
     if (changed && persist !== false) saveSettings();
+  }
+
+  // ==================== 逐人颜色 ====================
+
+  // 给某个人单独设色。hex 传 null / 非法值 = 清除这个人的单独颜色（回到跟随默认）。
+  //
+  // 「选了跟默认色一模一样的颜色」不写成单独设置 —— 否则名单里会攒一堆
+  // 值等于默认色的废条目，而且「跟随默认」和「手动设成同色」在行为上没区别。
+  function setNameColorFor(name, hex, persist) {
+    if (!name) return;
+    var c = hex == null ? null : normalizeColor(hex);
+    if (c && c === nameColor) c = null;
+
+    var before = customColorFor(name);
+    if (c === before) return;             // 没变化就别写存储
+
+    if (c) nameColors[name] = c;
+    else delete nameColors[name];
+
+    settings.nameColors = nameColors;
+    repaintCards();
+    syncNameColorRow(name);
+    syncNameColorSummary();
+    if (persist !== false) saveSettings();
+  }
+
+  function countCustomColors() {
+    var n = 0;
+    for (var k in nameColors) {
+      if (Object.prototype.hasOwnProperty.call(nameColors, k)) n++;
+    }
+    return n;
+  }
+
+  // 名单里出现过的名字（去重）。重名的人共用同一个颜色 —— 键是名字，本来就是这样。
+  function uniqueRoster() {
+    var seen = {}, out = [];
+    for (var i = 0; i < roster.length; i++) {
+      var p = roster[i];
+      if (seen[p.name]) continue;
+      seen[p.name] = true;
+      out.push(p);
+    }
+    return out;
+  }
+
+  function syncNameColorRow(name) {
+    if (!nameColorList) return;
+    var row = nameColorList.querySelector('[data-row-name="' + cssEscape(name) + '"]');
+    if (!row) return;
+    var input = row.querySelector(".nc-input");
+    var reset = row.querySelector(".nc-reset");
+    var c = customColorFor(name);
+    if (input) {
+      input.value = c || nameColor;
+      input.style.setProperty("--nc-swatch", c || nameColor);
+    }
+    if (reset) reset.hidden = !c;
+    row.classList.toggle("is-custom", Boolean(c));
+    if (c) row.style.setProperty("--nc-row-color", c);
+    else row.style.removeProperty("--nc-row-color");
+  }
+
+  function syncNameColorSummary() {
+    if (!nameColorSummary) return;
+    var n = countCustomColors();
+    nameColorSummary.textContent = n ? ("已单独设色 " + n + " 人") : "都跟随默认色";
+    if (nameColorResetAll) nameColorResetAll.disabled = n === 0;
+  }
+
+  // 用于把名字安全地塞进属性选择器：CSS.escape 在老环境没有，退回手工转义
+  function cssEscape(s) {
+    if (window.CSS && window.CSS.escape) return window.CSS.escape(s);
+    return String(s).replace(/["\\]/g, "\\$&");
+  }
+
+  function renderNameColorList() {
+    if (!nameColorList) return;
+    nameColorList.textContent = "";
+    var list = uniqueRoster();
+
+    if (!list.length) {
+      var empty = document.createElement("p");
+      empty.className = "nc-empty";
+      empty.textContent = "名单是空的，先回「抽签」页设置名单";
+      nameColorList.appendChild(empty);
+      return;
+    }
+
+    var frag = document.createDocumentFragment();
+    for (var i = 0; i < list.length; i++) {
+      var p = list[i];
+      var c = customColorFor(p.name);
+
+      var row = document.createElement("li");
+      row.className = "nc-row" + (c ? " is-custom" : "");
+      row.setAttribute("data-row-name", p.name);
+      if (c) row.style.setProperty("--nc-row-color", c);
+
+      var nameEl = document.createElement("span");
+      nameEl.className = "nc-name";
+      nameEl.textContent = p.name;
+
+      row.appendChild(nameEl);
+
+      // 学号模式下把学号也显示出来，否则同名/相似名不好分辨
+      if (settings.mode === "student" && p.id) {
+        var idEl = document.createElement("span");
+        idEl.className = "nc-id";
+        idEl.textContent = p.id;
+        row.appendChild(idEl);
+      }
+
+      var input = document.createElement("input");
+      input.type = "color";
+      input.className = "nc-input";
+      input.value = c || nameColor;
+      input.style.setProperty("--nc-swatch", c || nameColor);
+      input.setAttribute("aria-label", p.name + " 的名字颜色");
+      row.appendChild(input);
+
+      var reset = document.createElement("button");
+      reset.type = "button";
+      reset.className = "nc-reset";
+      reset.textContent = "跟随默认";
+      reset.hidden = !c;
+      reset.setAttribute("aria-label", "把 " + p.name + " 恢复成默认颜色");
+      row.appendChild(reset);
+
+      frag.appendChild(row);
+    }
+    nameColorList.appendChild(frag);
+    syncNameColorSummary();
+  }
+
+  function openNameColorModal() {
+    renderNameColorList();
+    nameColorModal.hidden = false;
+    activeModal = nameColorModal;
+    syncModalInert();
+    if (nameColorClose) nameColorClose.focus();
+  }
+
+  function closeNameColorModal(restoreFocus) {
+    if (activeModal !== nameColorModal) return;
+    nameColorModal.hidden = true;
+    activeModal = null;
+    syncModalInert();
+    // 焦点还给顶部的「颜色」按钮，而不是弹层入口 #nameColorBtn ——
+    // 后者在已经收起来的下拉面板里，对隐藏元素调 focus() 是无效的，焦点会掉到 body。
+    if (restoreFocus !== false) colorBtn.focus();
+  }
+
+  // 一次挡掉「焦点遍历 + 指针事件 + 无障碍树」三件事。
+  // 靠 body 的直接子元素来扫，所以弹层必须是 body 的子元素（和主站一样）。
+  function syncModalInert() {
+    var kids = document.body.children;
+    for (var i = 0; i < kids.length; i++) {
+      kids[i].inert = Boolean(activeModal) && kids[i] !== activeModal;
+    }
   }
 
   function openColorPop() {
@@ -947,6 +1183,55 @@
     }
   });
 
+  // ---- 逐人颜色弹层 ----
+
+  nameColorBtn.addEventListener("click", function () {
+    // 弹层和颜色下拉是两个入口，同时开着会互相盖住
+    if (colorPopOpen) closeColorPop(false);
+    openNameColorModal();
+  });
+
+  nameColorClose.addEventListener("click", function () { closeNameColorModal(); });
+
+  // 点遮罩空白处关掉（点内容区不关）
+  nameColorModal.addEventListener("click", function (e) {
+    if (e.target === nameColorModal) closeNameColorModal();
+  });
+
+  // 用事件委托，不给几十个取色器各绑一个监听。
+  // 注意：**这里不能整段重建列表** —— 系统取色器拖着的时候会连发 input，
+  // 一重建就把正在拖的那个控件换掉了，拖动手感直接断掉。所以只改这一行。
+  nameColorList.addEventListener("input", function (e) {
+    var input = e.target;
+    if (!input || !input.classList || !input.classList.contains("nc-input")) return;
+    var row = input.closest(".nc-row");
+    if (!row) return;
+    setNameColorFor(row.getAttribute("data-row-name"), input.value);
+  });
+
+  nameColorList.addEventListener("click", function (e) {
+    var btn = e.target && e.target.closest ? e.target.closest(".nc-reset") : null;
+    if (!btn) return;
+    var row = btn.closest(".nc-row");
+    if (!row) return;
+    setNameColorFor(row.getAttribute("data-row-name"), null);
+  });
+
+  nameColorResetAll.addEventListener("click", function () {
+    nameColors = {};
+    settings.nameColors = nameColors;
+    repaintCards();
+    renderNameColorList();
+    saveSettings();
+  });
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && activeModal) {
+      e.preventDefault();
+      closeNameColorModal();
+    }
+  });
+
   clearHistoryBtn.addEventListener("click", function () {
     history = [];
     saveHistory();
@@ -956,6 +1241,9 @@
   document.addEventListener("keydown", function (e) {
     var key = e.key;
     if (key !== " " && key !== "Spacebar" && key !== "Enter") return;
+    // 弹层开着的时候，空格绝不该开始点名。弹层里除了 input/button 还有别的可聚焦元素
+    // （比如列表本身），只靠下面那几个 tag 判断挡不住。
+    if (activeModal) return;
     var t = e.target;
     var tag = (t && t.tagName) || "";
     // 输入框和按钮交回原生行为：按钮上按空格＝激活该按钮（含「开始点名」）
@@ -1007,6 +1295,10 @@
       // 颜色要过一遍校验：存储里的值可能是手改的、也可能是旧版本留下的
       var savedColor = normalizeColor(saved.nameColor);
       if (savedColor) { nameColor = savedColor; settings.nameColor = savedColor; }
+      // 逐人颜色同理，而且它是个对象 —— 每个键值都要单独验，非法条目直接丢掉，
+      // 不能让任意字符串漏进 CSS 变量。
+      nameColors = sanitizeNameColors(saved.nameColors);
+      settings.nameColors = nameColors;
       if (saved.student && typeof saved.student === "object") {
         settings.student = Object.assign({}, settings.student, saved.student);
       }

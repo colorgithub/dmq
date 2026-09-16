@@ -476,7 +476,7 @@ console.log("\n== 9. 设置持久化 ==");
 //
 // 两条不变量，各自守一道：
 //   1) settings 里的每一个键，都必须在初始化时被恢复（否则就是「存了不读」）。
-//   2) 只负责部分键的那一页（CS 页只负责 mode 与 nameColor），写入必须是「读出现有 → 合并 → 写回」。
+//   2) 只负责部分键的那一页（CS 页只负责 mode / nameColor / nameColors），写入必须是「读出现有 → 合并 → 写回」。
 {
   const mainApp = fs.readFileSync(path.join(ROOT, "assets/js/app.js"), "utf8");
   const csApp = fs.readFileSync(path.join(ROOT, "cs/app.js"), "utf8");
@@ -537,7 +537,7 @@ console.log("\n== 9. 设置持久化 ==");
       const writes = [];
       if (/localStorage\.setItem\(/.test(csSave.body)) writes.push("localStorage");
       if (/bridge\.save\(/.test(csSave.body)) writes.push("桌面版桥接");
-      ok("cs/app.js 的 " + writeCalls + " 条写入路径全部走合并（只覆盖自己负责的 mode 与 nameColor）：" + writes.join(" / "));
+      ok("cs/app.js 的 " + writeCalls + " 条写入路径全部走合并（只覆盖自己负责的 mode / nameColor / nameColors）：" + writes.join(" / "));
     }
 
     // CS 页没有特效界面，不该碰这个键
