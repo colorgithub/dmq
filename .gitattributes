@@ -1,0 +1,8 @@
+# 这个仓库有一条硬约定：根目录的文件与 electron/webapp/ 下的副本必须**逐字节一致**
+# （tools/check.js 第 4/5/7 项就是按字节比的）。而本机 git 的 core.autocrlf=true 会在
+# 每次 checkout / restore 时把 LF 换成 CRLF —— 只要有一条路径被碰过、另一条没被碰过，
+# 两份就立刻不等，体检脚本报「桌面版会跑旧代码」，而内容其实一模一样。
+#
+# 2026-09-15 真的踩了一次：一次被中断的 git checkout 之后，16 个文件的换行符被改成 CRLF，
+# 逐个从索引 blob 原样写回才恢复。所以这里统一钉死成 LF。
+* text=auto eol=lf
