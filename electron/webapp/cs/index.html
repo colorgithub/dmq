@@ -17,6 +17,21 @@
       <div class="topbar-right">
         <button class="chip chip-btn chip-mode" id="modeChip" type="button">趣味模式</button>
         <span class="chip chip-dim" id="rosterCount">— 人</span>
+        <div class="color-picker">
+          <button class="chip chip-btn chip-color" id="colorBtn" type="button"
+                  aria-expanded="false" aria-controls="colorPop" aria-label="名字颜色">
+            <span class="color-swatch" id="colorSwatch" aria-hidden="true"></span>
+            <span class="chip-color-text">颜色</span>
+          </button>
+          <div class="color-pop" id="colorPop" hidden>
+            <p class="color-pop-title" id="colorPopTitle">名字颜色</p>
+            <div class="color-grid" id="colorGrid" role="group" aria-labelledby="colorPopTitle"></div>
+            <label class="color-custom">
+              <span>自定义</span>
+              <input type="color" id="colorCustom" value="#eb4b4b" aria-label="自定义名字颜色">
+            </label>
+          </div>
+        </div>
         <button class="chip chip-btn" id="soundBtn" type="button">音效 开</button>
         <a class="switch-btn" href="../index.html" title="切换回抽签">⇄ 抽签</a>
         <button class="chip chip-btn ball-return-chip" id="ballReturn" type="button" title="回到悬浮球">✕ 悬浮球</button>

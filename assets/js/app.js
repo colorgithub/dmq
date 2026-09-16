@@ -91,6 +91,10 @@ let settings = {
   funNames: "",
   studentNames: "",
   announce: true,
+  // 名字颜色由 CS 点名器（/cs/）负责编辑，主站没有这个界面。
+  // 但主站保存设置是整份覆盖，所以这里必须认识这个键、并在初始化时读回来，
+  // 否则用户在 CS 页挑好的颜色会被主站一次「保存设置」抹掉。
+  nameColor: "#eb4b4b",
   effects: {},
   student: { start: 1, pad: "", prefix: "", suffix: "" }
 };
@@ -918,6 +922,8 @@ Promise.all([loadNames(), loadEffects()]).then(async () => {
     // 但刷新页面时没人把它读回来，于是又变回「开」—— 设置看着是保存了，其实每次
     // 重新打开都失效。CS 页一直是有这一行的，主站没有。
     if (typeof saved.announce === "boolean") settings.announce = saved.announce;
+    // 名字颜色同理：CS 页写进来的值要读回来，否则主站整份覆盖保存时会把它清成默认色。
+    if (typeof saved.nameColor === "string") settings.nameColor = saved.nameColor;
     if (saved.effects && typeof saved.effects === "object") settings.effects = saved.effects;
     if (saved.student && typeof saved.student === "object") {
       settings.student = Object.assign({}, settings.student, saved.student);

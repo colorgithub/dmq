@@ -62,7 +62,65 @@ function extractFunction(src, name) {
 const inRange = (i, r) => Boolean(r) && i > r.start && i < r.end;
 
 // 从 `let/var/const NAME = { ... }` 的对象字面量里取出顶层键名
+// 去掉注释。理由：settings 字面量里给某个键写一句说明是很正常的（`nameColor` 就写了），
+// 而下面的解析是「按顶层逗号切块、块首必须直接是 `key:`」—— 注释会把键名挤到第二行，
+// 于是这个键被悄悄漏掉，守卫从此不再检查它。反过来，注释里写个 `foo:` 又会被误当成键。
+//
+// 注意：**把注释原地替换成空格，保持字符串长度不变**。否则索引会整体错位，
+// 所有「先 strip 再按偏移切片」的用法（比如 innermostBlock）都会取到错的位置。
+function stripComments(src) {
+  const out = src.split("");
+  let i = 0;
+  let quote = null;
+  while (i < src.length) {
+    const c = src[i];
+    if (quote) {
+      if (c === "\\") { i += 2; continue; }
+      if (c === quote) quote = null;
+      i++;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === "`") { quote = c; i++; continue; }
+    if (c === "/" && src[i + 1] === "/") {
+      while (i < src.length && src[i] !== "\n") { out[i] = " "; i++; }
+      continue;
+    }
+    if (c === "/" && src[i + 1] === "*") {
+      out[i] = " "; out[i + 1] = " "; i += 2;
+      while (i < src.length && !(src[i] === "*" && src[i + 1] === "/")) {
+        if (src[i] !== "\n") out[i] = " ";
+        i++;
+      }
+      if (i < src.length) { out[i] = " "; out[i + 1] = " "; i += 2; }
+      continue;
+    }
+    i++;
+  }
+  return out.join("");
+}
+
+// idx 所在的最近一层花括号块。用来回答「这行代码属于哪个函数 / 回调」——
+// 只看具名函数会漏掉事件回调（CS 页的模式切换就写在 addEventListener 的匿名函数里）。
+function innermostBlock(src, idx) {
+  const s = stripComments(src);
+  let depth = 0;
+  let open = -1;
+  for (let i = idx - 1; i >= 0; i--) {
+    const c = s[i];
+    if (c === "}") depth++;
+    else if (c === "{") { if (depth === 0) { open = i; break; } depth--; }
+  }
+  if (open < 0) return null;
+  let d = 0;
+  for (let i = open; i < s.length; i++) {
+    if (s[i] === "{") d++;
+    else if (s[i] === "}") { d--; if (d === 0) return s.slice(open, i + 1); }
+  }
+  return null;
+}
+
 function objectLiteralKeys(src, decl) {
+  src = stripComments(src);
   const at = src.indexOf(decl);
   if (at < 0) return null;
   const open = src.indexOf("{", at);
@@ -418,7 +476,7 @@ console.log("\n== 9. 设置持久化 ==");
 //
 // 两条不变量，各自守一道：
 //   1) settings 里的每一个键，都必须在初始化时被恢复（否则就是「存了不读」）。
-//   2) 只负责部分键的那一页（CS 页只负责 mode），写入必须是「读出现有 → 合并 → 写回」。
+//   2) 只负责部分键的那一页（CS 页只负责 mode 与 nameColor），写入必须是「读出现有 → 合并 → 写回」。
 {
   const mainApp = fs.readFileSync(path.join(ROOT, "assets/js/app.js"), "utf8");
   const csApp = fs.readFileSync(path.join(ROOT, "cs/app.js"), "utf8");
@@ -460,11 +518,13 @@ console.log("\n== 9. 设置持久化 ==");
       /bridge\.save\(\s*(settings|data)\s*\)/.test(csSave.body);
 
     // 更本质的不变量：**每一次写入都必须经过合并辅助函数**。
-    // 只检查「有没有用过 mergeModeInto」是不够的 —— 只要还有一条写入路径绕过它
+    // 只检查「有没有用过合并函数」是不够的 —— 只要还有一条写入路径绕过它
     // （比如桌面桥接那条），就仍然会把主站配置覆盖掉。
+    // 函数名从 mergeModeInto 改成了 mergeOwnKeysInto（CS 页现在不止负责 mode），
+    // 这里用宽松匹配，将来再改名也不会让守卫静默失效。
     const writeCalls = (csSave.body.match(/bridge\.save\(/g) || []).length +
                        (csSave.body.match(/localStorage\.setItem\(/g) || []).length;
-    const mergeCalls = (csSave.body.match(/mergeModeInto\(/g) || []).length;
+    const mergeCalls = (csSave.body.match(/merge[A-Za-z]*Into\(/g) || []).length;
     const allMerged = writeCalls > 0 && writeCalls === mergeCalls;
 
     if (wholeWrite) {
@@ -477,12 +537,65 @@ console.log("\n== 9. 设置持久化 ==");
       const writes = [];
       if (/localStorage\.setItem\(/.test(csSave.body)) writes.push("localStorage");
       if (/bridge\.save\(/.test(csSave.body)) writes.push("桌面版桥接");
-      ok("cs/app.js 的 " + writeCalls + " 条写入路径全部走合并（只覆盖自己负责的 mode）：" + writes.join(" / "));
+      ok("cs/app.js 的 " + writeCalls + " 条写入路径全部走合并（只覆盖自己负责的 mode 与 nameColor）：" + writes.join(" / "));
     }
 
     // CS 页没有特效界面，不该碰这个键
     if (csSave.body.indexOf("effects") >= 0) {
       fail("cs/app.js 的 saveSettings() 里出现了 effects —— CS 页没有特效界面，不该碰这个键");
+    }
+
+    // ---- 9.3 CS 页改过的键，必须真的被合并函数带出去 ----
+    // 9.2 只保证「每条写入都走了合并函数」，不保证合并函数里真的包含这个页面的所有键。
+    // 有人加一项新设置、忘了加进合并对象 —— 9.2 依然全绿，而用户在 CS 页改的东西
+    // 一刷新就没了（这正是 nameColor 这个新键最容易踩的坑）。
+    // 判据：凡是「改完设置就调 saveSettings()」的函数，它赋值的每个 settings.<key>
+    // 都必须在合并函数里出现。
+    const mergeNameMatch = csSave.body.match(/merge[A-Za-z]*Into\(/);
+    const mergeFnName = mergeNameMatch ? mergeNameMatch[0].slice(0, -1) : null;
+    const mergeFn = mergeFnName ? extractFunction(csApp, mergeFnName) : null;
+    if (!mergeFn) {
+      fail("找不到 cs/app.js 的合并辅助函数 —— saveSettings() 里没有调用任何 merge*Into()");
+    } else {
+      const mutating = new Set();
+      const reSet = /settings\.([A-Za-z_$][\w$]*)\s*=(?!=)/g;
+      const collect = (text) => {
+        let sm;
+        reSet.lastIndex = 0;
+        while ((sm = reSet.exec(text))) mutating.add(sm[1]);
+      };
+      // ① 具名函数：改完设置就保存的（比如 setNameColor）
+      const reFn = /function\s+([A-Za-z_$][\w$]*)\s*\(/g;
+      let fm;
+      while ((fm = reFn.exec(csApp))) {
+        const fn = extractFunction(csApp, fm[1]);
+        if (!fn || fn.body.indexOf("saveSettings()") < 0) continue;
+        collect(fn.body);
+      }
+      // ② 匿名回调：CS 页的模式切换写在 addEventListener 的匿名函数里，
+      //    只扫具名函数会漏掉它 —— 那正是这个守卫最该盯住的一类代码。
+      const reCall = /saveSettings\(\)/g;
+      let cm;
+      while ((cm = reCall.exec(csApp))) {
+        // 函数**定义**后面跟的是 `{`，调用后面跟的是 `;` 或换行。
+        // 不排除定义的话，它的「最近外层块」是整个 IIFE —— 初始化块里的
+        // settings.funNames = ... 会被一并算进来，守卫直接误报。
+        const after = csApp.slice(cm.index + "saveSettings()".length);
+        if (/^\s*\{/.test(after)) continue;
+        const blk = innermostBlock(csApp, cm.index);
+        if (blk) collect(blk);
+      }
+      const owned = [...mutating];
+      const merged = stripComments(mergeFn.body);
+      const notMerged = owned.filter((k) => merged.indexOf(k) < 0);
+      if (!owned.length) {
+        fail("在 cs/app.js 里找不到任何「改完设置就保存」的函数，9.3 无从判断（守卫已失效）");
+      } else if (notMerged.length) {
+        fail("cs/app.js 会改写 " + JSON.stringify(owned) + "，但 " + mergeFnName + "() 里漏了 " +
+             JSON.stringify(notMerged) + " —— 用户在 CS 页改的这一项会「存得进去、读不回来」");
+      } else {
+        ok("CS 页会改写的设置键 " + JSON.stringify(owned) + " 全部由 " + mergeFnName + "() 带出去");
+      }
     }
   }
 }

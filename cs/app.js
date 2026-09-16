@@ -6,9 +6,11 @@
  *   - 落点公式：center - (46 * cardW + cardW * (0.18 + 0.64 * rand))
  *
  * 等级（CS2 稀有度）已整体去掉：不再有稀有度中文名 / 分档配色 / 按稀有度的揭晓音阶，
- * 所有人的颜色统一为 NAME_COLOR 这一个红，揭晓音效也只有一种。
+ * 所有人共用同一个名字颜色，揭晓音效也只有一种。
+ * 颜色默认是 DEFAULT_NAME_COLOR 这个红，用户可以在顶部「颜色」里换成预设色或自定义色，
+ * 选择存在共享设置里（键名 nameColor，见 mergeOwnKeysInto 与 assets/js/app.js 的 settings）。
  *
- * 与主站共用：localStorage 键 lucky_settings_v1（模式、名单、学号规则）
+ * 与主站共用：localStorage 键 lucky_settings_v1（模式、名单、学号规则、名字颜色）
  * 与 data/names.json（失败时回退到 script 引入的 NAMES_DATA）
  */
 (function () {
@@ -30,10 +32,38 @@
   var SOUND_KEY = "cs_picker_sound_v1";
   var HISTORY_MAX = 12;
 
-  // 所有人的颜色都一样：统一红色。
-  // 原来是按 CS2 稀有度给每个人分配颜色（违禁金 / 隐秘红 / 保密紫 / 受限紫 / 军规蓝），
-  // 现在等级已经去掉，卡片、放大镜、结果卡、历史圆点全部用这一个红。
-  var NAME_COLOR = "#eb4b4b";
+  // 名字颜色。等级去掉之后全员同一个颜色，默认是红；
+  // 用户可以在顶部的「颜色」里改成别的（预设色或系统取色器任选）。
+  //
+  // 这一个颜色同时喂给两个 CSS 变量：
+  //   --name-color → 卡片底条 / 卡片辉光 / 中奖描边 / 历史圆点
+  //   --win-color  → 结果卡描边与光晕 / 结果卡上的学号
+  // 两个都写在 :root 上，子元素继承 —— 所以**不需要再逐张卡去写**，
+  // 改一处就全变（原来是每张卡各写一次，那是「每人一个颜色」时代留下的写法）。
+  var DEFAULT_NAME_COLOR = "#eb4b4b";
+  var nameColor = DEFAULT_NAME_COLOR;
+
+  // 预设色。除了这几个，还能用系统取色器选任意颜色。
+  var COLOR_PRESETS = [
+    ["#eb4b4b", "红"],
+    ["#ffd700", "金"],
+    ["#4b69ff", "蓝"],
+    ["#8847ff", "紫"],
+    ["#4ade80", "绿"],
+    ["#e8e8e8", "白"]
+  ];
+
+  // 颜色来自存储 / 用户输入，**必须校验后再用**：只接受 #rgb / #rrggbb，
+  // 统一成小写六位。非法值一律退回默认色 —— 不要把任意字符串塞进 CSS 变量。
+  function normalizeColor(v) {
+    if (typeof v !== "string") return null;
+    var s = v.trim().toLowerCase();
+    if (/^#[0-9a-f]{6}$/.test(s)) return s;
+    if (/^#[0-9a-f]{3}$/.test(s)) {
+      return "#" + s[1] + s[1] + s[2] + s[2] + s[3] + s[3];
+    }
+    return null;
+  }
 
   // ==================== DOM ====================
 
@@ -56,6 +86,11 @@
   var modeChip = document.getElementById("modeChip");
   var rosterCountEl = document.getElementById("rosterCount");
   var srAnnounce = document.getElementById("srAnnounce");
+  var colorBtn = document.getElementById("colorBtn");
+  var colorSwatch = document.getElementById("colorSwatch");
+  var colorPop = document.getElementById("colorPop");
+  var colorGrid = document.getElementById("colorGrid");
+  var colorCustom = document.getElementById("colorCustom");
 
   // ==================== 状态 ====================
 
@@ -65,6 +100,7 @@
   var winnerCards = [];            // 本轮中奖卡元素
   var spinning = false;
   var soundOn = true;
+  var colorPopOpen = false;        // 颜色下拉面板是否开着
   var rafId = 0;
   var resizeRaf = 0;
   // 滚轮逻辑位置，单位＝卡宽。用「卡坐标」而不是像素，
@@ -80,6 +116,9 @@
     funNames: "",
     studentNames: "",
     announce: true,
+    // 名字颜色。这是 CS 页**自己的**设置（主站用不到它，但必须原样带过 ——
+    // 主站保存设置时是整份覆盖，所以那边也得知道这个键，否则会被抹掉）。
+    nameColor: DEFAULT_NAME_COLOR,
     // CS 页没有特效界面，这个字段只是为了和主站的设置形状保持一致。
     // 它**不会被写回存储**（见 saveSettings：只合并 mode），所以别指望靠它
     // 覆盖主站的特效配置 —— 那正是之前把用户特效清空的原因。
@@ -245,7 +284,7 @@
     return Promise.resolve(readLocalSettings());
   }
 
-  // CS 页只负责 mode 这一个键 —— 它没有名单 / 特效 / 学号的编辑界面，
+  // CS 页只负责 mode 和 nameColor 这两个键 —— 它没有名单 / 特效 / 学号的编辑界面，
   // settings 里其余字段对它来说都是「别人的数据」。
   //
   // 两个页面共用同一份设置：网页版是 localStorage 的 lucky_settings_v1，
@@ -255,9 +294,16 @@
   // 原来这里是直接把整个 settings 写回去，于是 CS 页里恒为 {} 的 settings.effects
   // 会把用户在特效管理里配好的特效全部抹掉 —— 点一下顶部模式 chip 就会发生，
   // 而且不报任何错（主站只会悄悄退回内置特效）。
-  function mergeModeInto(prev) {
+  //
+  // 反过来也要小心：主站保存设置时同样是整份覆盖，所以主站那边也得知道 nameColor
+  // 这个键（见 assets/js/app.js 的 settings 与初始化恢复），否则用户在 CS 页选的颜色
+  // 会被主站的「保存设置」抹掉。tools/check.js 第 9 项守的就是这条。
+  function mergeOwnKeysInto(prev) {
     var base = (prev && typeof prev === "object") ? prev : {};
-    return Object.assign({}, base, { mode: settings.mode });
+    return Object.assign({}, base, {
+      mode: settings.mode,
+      nameColor: nameColor
+    });
   }
 
   function saveSettings() {
@@ -265,7 +311,7 @@
       var bridge = window.desktopBall && window.desktopBall.settings;
       if (bridge && bridge.save) {
         // 桌面版：先读出磁盘上的完整设置，合并后再写回
-        var commit = function (prev) { bridge.save(mergeModeInto(prev)); };
+        var commit = function (prev) { bridge.save(mergeOwnKeysInto(prev)); };
         if (bridge.load) {
           Promise.resolve(bridge.load()).then(commit, function () { commit(null); });
         } else {
@@ -273,7 +319,7 @@
         }
         return;
       }
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(mergeModeInto(readLocalSettings())));
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(mergeOwnKeysInto(readLocalSettings())));
     } catch (e) { /* ignore */ }
   }
 
@@ -514,7 +560,9 @@
   }
 
   function updateCard(card, item) {
-    card.style.setProperty("--name-color", NAME_COLOR);
+    // 这里原来会给每张卡各写一次 --name-color（「每人一个颜色」时代的写法）。
+    // 现在全员同色，颜色只写在 :root 上、由卡片继承，所以不必再逐张写 ——
+    // 一次 fillReels() 少 124 次样式写入，而且颜色只有一处真相。
     if (item.id) {
       card._id.textContent = item.id;
       card._id.hidden = false;
@@ -593,7 +641,7 @@
     history.forEach(function (h) {
       var li = document.createElement("li");
       li.className = "history-item";
-      li.style.setProperty("--name-color", NAME_COLOR);
+      // 颜色同上：继承 :root 上的 --name-color，不再逐条写
 
       var dot = document.createElement("span");
       dot.className = "history-dot";
@@ -731,7 +779,7 @@
     applyCards(endCards);
 
     winnerCards.forEach(function (el) { el.classList.add("is-winner"); });
-    root.style.setProperty("--win-color", NAME_COLOR);
+    // --win-color 由 applyNameColor() 统一写在 :root 上，不必每次揭晓都写一遍
 
     showResult(winner);
     setStatus("★ 开箱完成 ★", "is-win");
@@ -779,6 +827,78 @@
     soundBtn.title = soundOn ? "点击关闭音效与语音" : "点击开启音效与语音";
   }
 
+  // ==================== 名字颜色 ====================
+
+  // 把当前颜色写到根元素上。卡片 / 放大镜 / 结果卡 / 历史圆点都继承这两个变量，
+  // 所以只改这一处，全页跟着变。
+  function applyNameColor() {
+    root.style.setProperty("--name-color", nameColor);
+    root.style.setProperty("--win-color", nameColor);
+    syncColorUI();
+  }
+
+  function colorLabel(hex) {
+    for (var i = 0; i < COLOR_PRESETS.length; i++) {
+      if (COLOR_PRESETS[i][0] === hex) return COLOR_PRESETS[i][1];
+    }
+    return hex;
+  }
+
+  // 预设色块按需生成：色板只在 COLOR_PRESETS 里定义一处，
+  // 不用在 HTML 和 JS 里各写一份（那正是「两份数据对不上」的老毛病）。
+  function buildColorGrid() {
+    for (var i = 0; i < COLOR_PRESETS.length; i++) {
+      var hex = COLOR_PRESETS[i][0];
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "color-dot";
+      b.dataset.color = hex;
+      b.setAttribute("aria-label", COLOR_PRESETS[i][1]);
+      var dot = document.createElement("span");
+      dot.style.background = hex;
+      b.appendChild(dot);
+      colorGrid.appendChild(b);
+    }
+  }
+
+  function syncColorUI() {
+    colorSwatch.style.background = nameColor;
+    colorBtn.title = "名字颜色：" + colorLabel(nameColor);
+    colorCustom.value = nameColor;
+    var dots = colorGrid.querySelectorAll(".color-dot");
+    for (var i = 0; i < dots.length; i++) {
+      // 哪个预设是当前色，用 aria-pressed 表达 —— 只靠描边颜色读屏读不到
+      dots[i].setAttribute("aria-pressed",
+        dots[i].dataset.color === nameColor ? "true" : "false");
+    }
+  }
+
+  function setNameColor(v, persist) {
+    var c = normalizeColor(v);
+    if (!c) return;                       // 非法值直接忽略，不动当前颜色
+    var changed = c !== nameColor;
+    nameColor = c;
+    settings.nameColor = c;
+    applyNameColor();
+    if (changed && persist !== false) saveSettings();
+  }
+
+  function openColorPop() {
+    colorPop.hidden = false;
+    colorBtn.setAttribute("aria-expanded", "true");
+    colorPopOpen = true;
+  }
+
+  // 下拉面板不是模态：不遮罩、不锁焦点，所以不需要 inert
+  // （和主站的 .admin-panel 同类，判据见项目约定）。
+  function closeColorPop(restoreFocus) {
+    if (!colorPopOpen) return;
+    colorPop.hidden = true;
+    colorBtn.setAttribute("aria-expanded", "false");
+    colorPopOpen = false;
+    if (restoreFocus) colorBtn.focus();
+  }
+
   // ==================== 事件 ====================
 
   openBtn.addEventListener("click", startSpin);
@@ -798,6 +918,34 @@
     refreshRoster();
   });
   modeChip.title = "点击切换趣味模式 / 学号+名字模式";
+
+  colorBtn.addEventListener("click", function () {
+    if (colorPopOpen) closeColorPop(false);
+    else openColorPop();
+  });
+
+  colorGrid.addEventListener("click", function (e) {
+    var t = e.target && e.target.closest ? e.target.closest(".color-dot") : null;
+    if (t && t.dataset.color) setNameColor(t.dataset.color);
+  });
+
+  // 系统取色器拖的时候就会连发 input，实时预览；松手才落盘由 change 收尾
+  colorCustom.addEventListener("input", function () { setNameColor(colorCustom.value); });
+
+  // 点面板外面关掉。面板自己的点击会先冒泡到这里，
+  // 所以要显式排除「点在面板里」和「点在触发按钮上」两种情况。
+  document.addEventListener("click", function (e) {
+    if (!colorPopOpen) return;
+    if (colorPop.contains(e.target) || colorBtn.contains(e.target)) return;
+    closeColorPop(false);
+  });
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && colorPopOpen) {
+      e.preventDefault();
+      closeColorPop(true);
+    }
+  });
 
   clearHistoryBtn.addEventListener("click", function () {
     history = [];
@@ -836,6 +984,9 @@
   openBtn.disabled = true;
   soundOn = loadSoundPref();
   syncSoundButton();
+  // 先用默认色把变量写上去（避免首帧没有颜色），等设置读回来后再覆盖一次
+  buildColorGrid();
+  applyNameColor();
 
   if ("speechSynthesis" in window) {
     refreshVoices();
@@ -853,11 +1004,15 @@
       if (typeof saved.studentNames === "string") settings.studentNames = saved.studentNames;
       if (typeof saved.namesText === "string") settings.funNames = saved.namesText; // 兼容旧数据
       if (typeof saved.announce === "boolean") settings.announce = saved.announce;
+      // 颜色要过一遍校验：存储里的值可能是手改的、也可能是旧版本留下的
+      var savedColor = normalizeColor(saved.nameColor);
+      if (savedColor) { nameColor = savedColor; settings.nameColor = savedColor; }
       if (saved.student && typeof saved.student === "object") {
         settings.student = Object.assign({}, settings.student, saved.student);
       }
     }
 
+    applyNameColor();     // 用读回来的颜色覆盖掉启动时的默认色
     history = loadHistory();
     renderHistory();
     refreshRoster();
